@@ -38,8 +38,8 @@ class PerformanceMonitorService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 1001
         private const val NOTIFICATION_ID_NET = 1002
-        private const val CHANNEL_ID = "perf_monitor_channel"
-        private const val CHANNEL_NAME = "Performance Monitor Service"
+        private const val CHANNEL_CPU_ID = "perf_monitor_cpu_channel"
+        private const val CHANNEL_NET_ID = "perf_monitor_net_channel"
         
         fun startService(context: Context) {
             val intent = Intent(context, PerformanceMonitorService::class.java)
@@ -121,7 +121,7 @@ class PerformanceMonitorService : Service() {
         )
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL_ID)
+            Notification.Builder(this, CHANNEL_CPU_ID)
         } else {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
@@ -146,6 +146,7 @@ class PerformanceMonitorService : Service() {
             .setWhen(serviceStartTime)
             .setShowWhen(false)
             .setOnlyAlertOnce(true)
+            .setGroup("group_cpu")
             .build()
     }
 
@@ -164,7 +165,7 @@ class PerformanceMonitorService : Service() {
         val content = "Download: ↓$rxSpeedStr | Upload: ↑$txSpeedStr"
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL_ID)
+            Notification.Builder(this, CHANNEL_NET_ID)
         } else {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
@@ -185,30 +186,50 @@ class PerformanceMonitorService : Service() {
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setWhen(serviceStartTime)
+            .setWhen(serviceStartTime + 1000L)
             .setShowWhen(false)
             .setOnlyAlertOnce(true)
+            .setGroup("group_net")
             .build()
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Displays live hardware performance statistics"
-                setShowBadge(false)
-            }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
+            
+            // 1. CPU Monitor Channel
+            val cpuChannel = NotificationChannel(
+                CHANNEL_CPU_ID,
+                "SchoenMon CPU Monitor",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Displays live CPU graph bars in status bar"
+                setShowBadge(false)
+                setSound(null, null)
+                enableLights(false)
+                enableVibration(false)
+            }
+            manager.createNotificationChannel(cpuChannel)
+
+            // 2. Network Speeds Channel
+            val netChannel = NotificationChannel(
+                CHANNEL_NET_ID,
+                "SchoenMon Network Speeds",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Displays live numerical network speeds in status bar"
+                setShowBadge(false)
+                setSound(null, null)
+                enableLights(false)
+                enableVibration(false)
+            }
+            manager.createNotificationChannel(netChannel)
         }
     }
 
     private fun createMenuMetersBitmap(cpuPercent: Float, rxSpeed: Long, txSpeed: Long): Bitmap? {
         return try {
-            val bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
+            val bitmap = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             canvas.drawColor(Color.TRANSPARENT)
 
@@ -236,36 +257,36 @@ class PerformanceMonitorService : Service() {
                 isAntiAlias = true
             }
 
-            val trackTop = 4f
-            val trackBottom = 92f
-            val trackHeight = trackBottom - trackTop // 88f
-            val cornerRadius = 4f
+            val trackTop = 2f
+            val trackBottom = 46f
+            val trackHeight = trackBottom - trackTop // 44f
+            val cornerRadius = 2f
 
-            // 1. CPU Bar (Left)
+            // 1. CPU Bar (Left): X from 5 to 13
             val cpuRatio = (cpuPercent / 100f).coerceIn(0f, 1f)
             val cpuFillHeight = trackHeight * cpuRatio
             val cpuTop = trackBottom - cpuFillHeight
-            canvas.drawRoundRect(11f, trackTop, 29f, trackBottom, cornerRadius, cornerRadius, trackPaint)
+            canvas.drawRoundRect(5f, trackTop, 13f, trackBottom, cornerRadius, cornerRadius, trackPaint)
             if (cpuFillHeight > 0) {
-                canvas.drawRoundRect(11f, cpuTop, 29f, trackBottom, cornerRadius, cornerRadius, cpuPaint)
+                canvas.drawRoundRect(5f, cpuTop, 13f, trackBottom, cornerRadius, cornerRadius, cpuPaint)
             }
 
-            // 2. Net RX Bar (Middle)
+            // 2. Net RX Bar (Middle): X from 19 to 27
             val rxRatio = getNetworkRatio(rxSpeed)
             val rxFillHeight = trackHeight * rxRatio
             val rxTop = trackBottom - rxFillHeight
-            canvas.drawRoundRect(39f, trackTop, 57f, trackBottom, cornerRadius, cornerRadius, trackPaint)
+            canvas.drawRoundRect(19f, trackTop, 27f, trackBottom, cornerRadius, cornerRadius, trackPaint)
             if (rxFillHeight > 0) {
-                canvas.drawRoundRect(39f, rxTop, 57f, trackBottom, cornerRadius, cornerRadius, rxPaint)
+                canvas.drawRoundRect(19f, rxTop, 27f, trackBottom, cornerRadius, cornerRadius, rxPaint)
             }
 
-            // 3. Net TX Bar (Right)
+            // 3. Net TX Bar (Right): X from 33 to 41
             val txRatio = getNetworkRatio(txSpeed)
             val txFillHeight = trackHeight * txRatio
             val txTop = trackBottom - txFillHeight
-            canvas.drawRoundRect(67f, trackTop, 85f, trackBottom, cornerRadius, cornerRadius, trackPaint)
+            canvas.drawRoundRect(33f, trackTop, 41f, trackBottom, cornerRadius, cornerRadius, trackPaint)
             if (txFillHeight > 0) {
-                canvas.drawRoundRect(67f, txTop, 85f, trackBottom, cornerRadius, cornerRadius, txPaint)
+                canvas.drawRoundRect(33f, txTop, 41f, trackBottom, cornerRadius, cornerRadius, txPaint)
             }
 
             bitmap
@@ -276,13 +297,21 @@ class PerformanceMonitorService : Service() {
 
     private fun createNetSpeedBitmap(rxSpeed: Long, txSpeed: Long): Bitmap? {
         return try {
-            val bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
+            val bitmap = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             canvas.drawColor(Color.TRANSPARENT)
 
-            val paint = Paint().apply {
-                color = Color.WHITE
-                textSize = 38f
+            val rxPaint = Paint().apply {
+                color = Color.parseColor("#00E676") // Neo Green
+                textSize = 19f
+                isAntiAlias = true
+                textAlign = Paint.Align.CENTER
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+
+            val txPaint = Paint().apply {
+                color = Color.parseColor("#D500F9") // Electric Pink
+                textSize = 19f
                 isAntiAlias = true
                 textAlign = Paint.Align.CENTER
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -291,10 +320,9 @@ class PerformanceMonitorService : Service() {
             val rxStr = "↓" + formatShortSpeed(rxSpeed)
             val txStr = "↑" + formatShortSpeed(txSpeed)
 
-            // Centering calculations for top half (center = 24f) and bottom half (center = 72f)
-            // Offset for font size 38f is roughly +10f
-            canvas.drawText(rxStr, 48f, 34f, paint)
-            canvas.drawText(txStr, 48f, 82f, paint)
+            // Centering calculations for top half and bottom half on a 48x48 canvas
+            canvas.drawText(rxStr, 24f, 17f, rxPaint)
+            canvas.drawText(txStr, 24f, 41f, txPaint)
 
             bitmap
         } catch (e: Exception) {
