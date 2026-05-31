@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Emulator",
+      "type": "shell",
+      "command": "C:\\Users\\mtsch\\AppData\\AndroidCLI\\android.exe emulator start Medium_Phone_API_36.1",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "group": "build"
+      }
+    },
+    {
+      "label": "Run PerfStream",
+      "type": "shell",
+      "command": "C:\\Users\\mtsch\\AppData\\AndroidCLI\\android.exe run --activity=com.example.perfstream.MainActivity",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "group": "build"
+      }
+    },
+    {
+      "label": "Start Emulator and Run App",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Start Emulator",
+        "Run PerfStream"
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -105,6 +105,14 @@ Gradle and Android CLI options:
 C:\Users\mtsch\AppData\AndroidCLI\android.exe run --activity=com.example.perfstream.MainActivity
 ```
 
+### Local Testing on Emulator
+For rapid local testing using the pre-configured `Medium_Phone_API_36.1` emulator:
+1. **VS Code Tasks**: Run the default task `Start Emulator and Run App` (`Ctrl+Shift+B` or through the Tasks panel). This automatically boots the emulator, waits for it to become ready, and then deploys/runs PerfStream.
+2. **Standalone Script**: Double-click or run [run-on-emulator.bat](file:///c:/Users/mtsch/AndroidPerfMonitor/run-on-emulator.bat) from any terminal:
+   ```cmd
+   .\run-on-emulator.bat
+   ```
+
 ---
 
 ## 5. Hardware Folklore & Platform Gotchas
