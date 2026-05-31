@@ -23,11 +23,19 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo.
-echo [2/2] Compiling, deploying, and running PerfStream...
-echo.
-"!CLI_PATH!" run --activity=com.example.perfstream.MainActivity
+echo [2/3] Compiling the project...
+call .\gradlew.bat assembleDebug
 if %ERRORLEVEL% neq 0 (
-    echo [ERROR] Failed to compile or deploy the application.
+    echo [ERROR] Failed to compile the application.
+    goto error
+)
+
+echo.
+echo [3/3] Deploying and launching PerfStream on the emulator...
+echo.
+"!CLI_PATH!" run --activity=com.example.perfstream.MainActivity --apks=app/build/outputs/apk/debug/app-debug.apk
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Failed to deploy or launch the application.
     goto error
 )
 
