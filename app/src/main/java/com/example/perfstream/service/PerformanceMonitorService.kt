@@ -7,15 +7,11 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.Typeface
-import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.IBinder
 import com.example.perfstream.MainActivity
+import com.example.perfstream.R
 import com.example.perfstream.core.PerformanceStats
 import com.example.perfstream.core.StatsCollector
 import com.example.perfstream.data.PerformanceMonitorRepository
@@ -37,11 +33,25 @@ class PerformanceMonitorService : Service() {
 
     companion object {
         private const val NOTIFICATION_ID = 1001
-        private const val NOTIFICATION_ID_NET = 1002
         private const val CHANNEL_ID = "perf_monitor_channel"
         private const val CHANNEL_NAME = "SchoenMon Performance"
-        private const val CHANNEL_NET_ID = "perf_monitor_net_channel"
-        private const val CHANNEL_NET_NAME = "SchoenMon Network Speeds"
+
+        // Pre-rendered bar icon drawables (CPU bar 0%-100% in 10% steps).
+        // Samsung One UI replaces bitmap/level-list icons with the launcher
+        // icon, so we switch between static vector drawables by resource ID.
+        private val BAR_ICONS = intArrayOf(
+            R.drawable.ic_stat_bars_0,
+            R.drawable.ic_stat_bars_1,
+            R.drawable.ic_stat_bars_2,
+            R.drawable.ic_stat_bars_3,
+            R.drawable.ic_stat_bars_4,
+            R.drawable.ic_stat_bars_5,
+            R.drawable.ic_stat_bars_6,
+            R.drawable.ic_stat_bars_7,
+            R.drawable.ic_stat_bars_8,
+            R.drawable.ic_stat_bars_9,
+            R.drawable.ic_stat_bars_10,
+        )
         
         fun startService(context: Context) {
             val intent = Intent(context, PerformanceMonitorService::class.java)
@@ -67,11 +77,10 @@ class PerformanceMonitorService : Service() {
         if (!isRunning) {
             isRunning = true
             serviceStartTime = System.currentTimeMillis()
-            createNotificationChannels()
+            createNotificationChannel()
             
-            // Start in foreground immediately to satisfy Android OS requirements
             val initialStats = statsCollector.sample()
-            val notification = buildBarNotification(initialStats)
+            val notification = buildNotification(initialStats)
             startForeground(NOTIFICATION_ID, notification)
 
             startSamplingLoop()
@@ -83,29 +92,24 @@ class PerformanceMonitorService : Service() {
         samplingJob = serviceScope.launch {
             while (isRunning) {
                 val stats = statsCollector.sample()
-                // Update shared repository for Compose UI
                 PerformanceMonitorRepository.updateStats(stats)
                 
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-                // 1. Update primary bar-graph notification (the foreground service notification)
-                val barNotification = buildBarNotification(stats)
-                notificationManager.notify(NOTIFICATION_ID, barNotification)
-
-                // 2. Update secondary numeric network speed notification
-                val netNotification = buildNetSpeedNotification(stats)
-                notificationManager.notify(NOTIFICATION_ID_NET, netNotification)
+                val notification = buildNotification(stats)
+                notificationManager.notify(NOTIFICATION_ID, notification)
                 
-                delay(2000) // Sample every 2 seconds
+                delay(2000)
             }
         }
     }
 
     // ──────────────────────────────────────────────
-    //  Notification 1 — Colored Bars (foreground)
+    //  Single notification with dynamic bar icon
+    //  CPU bar height changes every 2s via drawable
+    //  switching; network speeds in notification text
     // ──────────────────────────────────────────────
 
-    private fun buildBarNotification(stats: PerformanceStats): Notification {
+    private fun buildNotification(stats: PerformanceStats): Notification {
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -119,11 +123,15 @@ class PerformanceMonitorService : Service() {
         val ramUsedGb = stats.usedMemoryBytes / 1024f / 1024f / 1024f
         val ramTotalGb = stats.totalMemoryBytes / 1024f / 1024f / 1024f
 
-        val title = "SchoenMon Live Monitor"
+        val title = String.format(
+            Locale.US,
+            "CPU: %.0f%% | ↓%s ↑%s",
+            cpuPercent, rxSpeedStr, txSpeedStr
+        )
         val content = String.format(
             Locale.US,
-            "CPU: %.0f%% | NET: ↓%s ↑%s | RAM: %.1fG/%.1fG",
-            cpuPercent, rxSpeedStr, txSpeedStr, ramUsedGb, ramTotalGb
+            "RAM: %.1fG/%.1fG",
+            ramUsedGb, ramTotalGb
         )
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -133,13 +141,10 @@ class PerformanceMonitorService : Service() {
             Notification.Builder(this)
         }
 
-        // Dynamic MenuMeters-style 3-bar status icon (CPU · RX · TX)
-        val dynamicIconBitmap = createMenuMetersBitmap(cpuPercent, stats.rxSpeedBytesPerSec, stats.txSpeedBytesPerSec)
-        if (dynamicIconBitmap != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            builder.setSmallIcon(Icon.createWithBitmap(dynamicIconBitmap))
-        } else {
-            builder.setSmallIcon(com.example.perfstream.R.mipmap.ic_launcher)
-        }
+        // Pick the right bar icon based on CPU load (0-10 → 0%-100%)
+        val cpuLevel = (cpuPercent / 10f).toInt().coerceIn(0, 10)
+        builder.setSmallIcon(BAR_ICONS[cpuLevel])
+        builder.setColor(Color.parseColor("#00E5FF")) // Cyber Cyan accent
 
         return builder
             .setContentTitle(title)
@@ -155,228 +160,27 @@ class PerformanceMonitorService : Service() {
     }
 
     // ──────────────────────────────────────────────
-    //  Notification 2 — Numeric Network Speed
+    //  Channel
     // ──────────────────────────────────────────────
 
-    private fun buildNetSpeedNotification(stats: PerformanceStats): Notification {
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            1, // Distinct request code from bar notification
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val rxSpeedStr = formatSpeed(stats.rxSpeedBytesPerSec)
-        val txSpeedStr = formatSpeed(stats.txSpeedBytesPerSec)
-
-        val title = "SchoenMon Network"
-        val content = "↓$rxSpeedStr  ↑$txSpeedStr"
-
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL_NET_ID)
-        } else {
-            @Suppress("DEPRECATION")
-            Notification.Builder(this)
-        }
-
-        // Dynamic numeric speed icon
-        val netBitmap = createNetSpeedBitmap(stats.rxSpeedBytesPerSec, stats.txSpeedBytesPerSec)
-        if (netBitmap != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            builder.setSmallIcon(Icon.createWithBitmap(netBitmap))
-        } else {
-            builder.setSmallIcon(com.example.perfstream.R.mipmap.ic_launcher)
-        }
-
-        return builder
-            .setContentTitle(title)
-            .setContentText(content)
-            .setContentIntent(pendingIntent)
-            .setOngoing(true)
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setWhen(serviceStartTime + 1000L) // Offset so Android sorts it after bar icon
-            .setShowWhen(false)
-            .setOnlyAlertOnce(true)
-            .build()
-    }
-
-    // ──────────────────────────────────────────────
-    //  Notification Channels
-    // ──────────────────────────────────────────────
-
-    private fun createNotificationChannels() {
+    private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-            // Primary channel – bar graph icon
-            val barChannel = NotificationChannel(
+            val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Displays live CPU/network bar graph in status bar"
+                description = "SchoenMon performance monitoring"
                 setShowBadge(false)
             }
-            manager.createNotificationChannel(barChannel)
-
-            // Secondary channel – numeric speed icon
-            val netChannel = NotificationChannel(
-                CHANNEL_NET_ID,
-                CHANNEL_NET_NAME,
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Displays live numerical network speeds in status bar"
-                setShowBadge(false)
-            }
-            manager.createNotificationChannel(netChannel)
-        }
-    }
-
-    // ──────────────────────────────────────────────
-    //  Bitmap: 3-bar MenuMeters graph  (96 × 96)
-    // ──────────────────────────────────────────────
-
-    private fun createMenuMetersBitmap(cpuPercent: Float, rxSpeed: Long, txSpeed: Long): Bitmap? {
-        return try {
-            val bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
-            canvas.drawColor(Color.TRANSPARENT)
-
-            val trackPaint = Paint().apply {
-                color = Color.argb(40, 255, 255, 255)
-                style = Paint.Style.FILL
-                isAntiAlias = true
-            }
-
-            val cpuPaint = Paint().apply {
-                color = Color.parseColor("#00E5FF") // Cyber Cyan
-                style = Paint.Style.FILL
-                isAntiAlias = true
-            }
-
-            val rxPaint = Paint().apply {
-                color = Color.parseColor("#00E676") // Neo Green
-                style = Paint.Style.FILL
-                isAntiAlias = true
-            }
-
-            val txPaint = Paint().apply {
-                color = Color.parseColor("#D500F9") // Electric Pink
-                style = Paint.Style.FILL
-                isAntiAlias = true
-            }
-
-            val trackTop = 4f
-            val trackBottom = 92f
-            val trackHeight = trackBottom - trackTop // 88f
-            val cornerRadius = 4f
-
-            // 1. CPU Bar (Left)
-            val cpuRatio = (cpuPercent / 100f).coerceIn(0f, 1f)
-            val cpuFillHeight = trackHeight * cpuRatio
-            val cpuTop = trackBottom - cpuFillHeight
-            canvas.drawRoundRect(11f, trackTop, 29f, trackBottom, cornerRadius, cornerRadius, trackPaint)
-            if (cpuFillHeight > 0) {
-                canvas.drawRoundRect(11f, cpuTop, 29f, trackBottom, cornerRadius, cornerRadius, cpuPaint)
-            }
-
-            // 2. Net RX Bar (Middle)
-            val rxRatio = getNetworkRatio(rxSpeed)
-            val rxFillHeight = trackHeight * rxRatio
-            val rxTop = trackBottom - rxFillHeight
-            canvas.drawRoundRect(39f, trackTop, 57f, trackBottom, cornerRadius, cornerRadius, trackPaint)
-            if (rxFillHeight > 0) {
-                canvas.drawRoundRect(39f, rxTop, 57f, trackBottom, cornerRadius, cornerRadius, rxPaint)
-            }
-
-            // 3. Net TX Bar (Right)
-            val txRatio = getNetworkRatio(txSpeed)
-            val txFillHeight = trackHeight * txRatio
-            val txTop = trackBottom - txFillHeight
-            canvas.drawRoundRect(67f, trackTop, 85f, trackBottom, cornerRadius, cornerRadius, trackPaint)
-            if (txFillHeight > 0) {
-                canvas.drawRoundRect(67f, txTop, 85f, trackBottom, cornerRadius, cornerRadius, txPaint)
-            }
-
-            bitmap
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    // ──────────────────────────────────────────────
-    //  Bitmap: Numeric speed readout  (96 × 96)
-    // ──────────────────────────────────────────────
-
-    private fun createNetSpeedBitmap(rxSpeed: Long, txSpeed: Long): Bitmap? {
-        return try {
-            val bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
-            canvas.drawColor(Color.TRANSPARENT)
-
-            val rxPaint = Paint().apply {
-                color = Color.parseColor("#00E676") // Neo Green  (download)
-                textSize = 36f
-                isAntiAlias = true
-                textAlign = Paint.Align.CENTER
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            }
-
-            val txPaint = Paint().apply {
-                color = Color.parseColor("#D500F9") // Electric Pink  (upload)
-                textSize = 36f
-                isAntiAlias = true
-                textAlign = Paint.Align.CENTER
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            }
-
-            val rxStr = "↓" + formatShortSpeed(rxSpeed)
-            val txStr = "↑" + formatShortSpeed(txSpeed)
-
-            // Top half for download, bottom half for upload
-            canvas.drawText(rxStr, 48f, 34f, rxPaint)
-            canvas.drawText(txStr, 48f, 82f, txPaint)
-
-            bitmap
-        } catch (e: Exception) {
-            null
+            manager.createNotificationChannel(channel)
         }
     }
 
     // ──────────────────────────────────────────────
     //  Helpers
     // ──────────────────────────────────────────────
-
-    private fun formatShortSpeed(bytesPerSec: Long): String {
-        return when {
-            bytesPerSec >= 1024 * 1024 -> String.format(Locale.US, "%.0fM", bytesPerSec / 1024f / 1024f)
-            bytesPerSec >= 1024 -> String.format(Locale.US, "%.0fK", bytesPerSec / 1024f)
-            else -> "0K"
-        }
-    }
-
-    private fun getNetworkRatio(speedBytesPerSec: Long): Float {
-        if (speedBytesPerSec <= 0) return 0f
-
-        // Logarithmic scale starting from 1 KB/s to 10 MB/s
-        val minSpeed = 1024.0 // 1 KB/s
-        val maxSpeed = 10.0 * 1024.0 * 1024.0 // 10 MB/s
-
-        if (speedBytesPerSec < minSpeed) {
-            // Linear scale for low speeds between 0 and 1 KB/s
-            val linearRatio = (speedBytesPerSec.toDouble() / minSpeed).toFloat()
-            // Map 0..1 KB/s to 0..0.15 of the bar height
-            return (linearRatio * 0.15f).coerceIn(0f, 0.15f)
-        }
-
-        val logMin = Math.log(minSpeed)
-        val logMax = Math.log(maxSpeed)
-        val logVal = Math.log(speedBytesPerSec.toDouble())
-
-        val logRatio = ((logVal - logMin) / (logMax - logMin)).toFloat()
-        // Map 1 KB/s..10 MB/s to 0.15f..1.0f of the bar height
-        return (0.15f + logRatio * 0.85f).coerceIn(0.15f, 1.0f)
-    }
 
     private fun formatSpeed(bytesPerSec: Long): String {
         return when {
@@ -390,11 +194,6 @@ class PerformanceMonitorService : Service() {
         isRunning = false
         samplingJob?.cancel()
         serviceJob.cancel()
-
-        // Clean up the secondary notification
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.cancel(NOTIFICATION_ID_NET)
-
         super.onDestroy()
     }
 

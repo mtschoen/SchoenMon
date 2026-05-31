@@ -1,0 +1,30 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Left bar (CPU) track -->
+    <path
+        android:fillColor="#40FFFFFF"
+        android:pathData="M5,2 h4 v20 h-4 Z" />
+    <!-- Middle bar (DL) track -->
+    <path
+        android:fillColor="#40FFFFFF"
+        android:pathData="M10,2 h4 v20 h-4 Z" />
+    <!-- Right bar (UL) track -->
+    <path
+        android:fillColor="#40FFFFFF"
+        android:pathData="M15,2 h4 v20 h-4 Z" />
+    <!-- CPU fill: 80% (16dp) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M5,6 h4 v16 h-4 Z" />
+    <!-- Middle bar (DL) fill: 50% -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M10,12 h4 v10 h-4 Z" />
+    <!-- Right bar (UL) fill: 50% -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15,12 h4 v10 h-4 Z" />
+</vector>
