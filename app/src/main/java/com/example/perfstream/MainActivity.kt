@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -16,17 +17,29 @@ import com.example.perfstream.service.PerformanceMonitorService
 import com.example.perfstream.theme.PerfStreamTheme
 
 class MainActivity : ComponentActivity() {
+
+  // Auto-request permission at first launch and start service immediately once allowed
+  private val requestPermissionLauncher = registerForActivityResult(
+    ActivityResultContracts.RequestPermission()
+  ) { isGranted: Boolean ->
+    if (isGranted) {
+      PerformanceMonitorService.startService(this)
+    }
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
-    // Auto-start background monitor at app launch if permission is already granted
-    val hasNotificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    // Check and trigger auto-start logic
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      val permissionCheck = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+      if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
+        PerformanceMonitorService.startService(this)
+      } else {
+        // Request notification permission immediately on first launch to unlock status bar icon
+        requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+      }
     } else {
-      true
-    }
-
-    if (hasNotificationPermission) {
       PerformanceMonitorService.startService(this)
     }
 
