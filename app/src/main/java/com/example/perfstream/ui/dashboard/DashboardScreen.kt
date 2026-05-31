@@ -2,8 +2,10 @@ package com.example.perfstream.ui.dashboard
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
@@ -92,6 +94,12 @@ fun DashboardScreen(modifier: Modifier = Modifier) {
 
         // Service controller card
         ServiceController(isServiceRunning, ::toggleService)
+
+        // Show Samsung One UI Helper Card if we are running on a Samsung device
+        if (Build.MANUFACTURER.equals("samsung", ignoreCase = true)) {
+            Spacer(modifier = Modifier.height(16.dp))
+            SamsungOneUiHelperCard(context)
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -545,5 +553,85 @@ private fun formatBandwidth(bytesPerSec: Long): String {
         bytesPerSec >= 1024 * 1024 -> String.format(Locale.US, "%.2f MB/s", bytesPerSec / 1024f / 1024f)
         bytesPerSec >= 1024 -> String.format(Locale.US, "%.1f KB/s", bytesPerSec / 1024f)
         else -> "$bytesPerSec B/s"
+    }
+}
+
+@Composable
+fun SamsungOneUiHelperCard(context: Context) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color(0xFFFFAB00).copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF12121A)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "⚠️ Samsung Status Bar Fix",
+                    color = Color(0xFFFFAB00),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Samsung One UI 6+ overrides custom status bar icons (like our speed numbers and bars) with a generic app icon.\n\nTo see your real-time speed numbers and graph bars in the status bar:\n1. Open System Settings below.\n2. Tap 'Advanced settings'.\n3. Turn OFF 'Show app icon in notifications'.",
+                color = Color.LightGray,
+                fontSize = 12.sp,
+                lineHeight = 16.sp
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        try {
+                            val intent = Intent("android.settings.NOTIFICATION_SETTINGS")
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            try {
+                                val intent = Intent(Settings.ACTION_SETTINGS)
+                                context.startActivity(intent)
+                            } catch (ex: Exception) {}
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E1E28)),
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("System Settings", color = Color.White, fontSize = 12.sp)
+                }
+                
+                Button(
+                    onClick = {
+                        try {
+                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            try {
+                                val intent = Intent(Settings.ACTION_SETTINGS)
+                                context.startActivity(intent)
+                            } catch (ex: Exception) {}
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFAB00)),
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("App Settings", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
     }
 }
