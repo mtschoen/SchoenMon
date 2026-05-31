@@ -10,7 +10,8 @@
       "runtimeArgs": [
         "run",
         "--activity=com.example.perfstream.MainActivity",
-        "--apks=app/build/outputs/apk/debug/app-debug.apk"
+        "--apks=app/build/outputs/apk/debug/app-debug.apk",
+        "--device=emulator-5554"
       ],
       "console": "integratedTerminal"
     }

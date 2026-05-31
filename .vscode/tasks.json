@@ -4,7 +4,7 @@
     {
       "label": "Start Emulator",
       "type": "shell",
-      "command": "C:\\Users\\mtsch\\AppData\\AndroidCLI\\android.exe emulator start Medium_Phone_API_36.1",
+      "command": "C:\\Users\\mtsch\\AppData\\AndroidCLI\\android.exe emulator start --cold Medium_Phone_API_36.1",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -35,7 +35,7 @@
     {
       "label": "Deploy and Run App",
       "type": "shell",
-      "command": "C:\\Users\\mtsch\\AppData\\AndroidCLI\\android.exe run --activity=com.example.perfstream.MainActivity --apks=app/build/outputs/apk/debug/app-debug.apk",
+      "command": "C:\\Users\\mtsch\\AppData\\AndroidCLI\\android.exe run --activity=com.example.perfstream.MainActivity --apks=app/build/outputs/apk/debug/app-debug.apk --device=emulator-5554",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
