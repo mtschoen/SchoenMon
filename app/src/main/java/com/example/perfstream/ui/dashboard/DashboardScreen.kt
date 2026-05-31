@@ -161,7 +161,7 @@ fun HeaderSection(isServiceRunning: Boolean) {
     ) {
         Column {
             Text(
-                text = "PERFSTREAM",
+                text = "SCHOENMON",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 2.5.sp,

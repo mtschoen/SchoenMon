@@ -1,0 +1,51 @@
+name: SchoenMon CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  build:
+    name: Build & Quality Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Node.js (for Aislop linter)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Aislop Quality Gate
+        run: npx --yes aislop scan
+
+      - name: Setup Gradle Cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradlew Executable
+        run: chmod +x gradlew
+
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Assemble Debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Build Production Release Bundle (AAB)
+        run: ./gradlew bundleRelease
+
+      - name: Upload Production Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: schoenmon-production-bundle
+          path: app/build/outputs/bundle/release/app-release-unsigned.aab

@@ -33,6 +33,7 @@ class PerformanceMonitorService : Service() {
     private lateinit var statsCollector: StatsCollector
     private var isRunning = false
     private var samplingJob: Job? = null
+    private var serviceStartTime: Long = 0L
 
     companion object {
         private const val NOTIFICATION_ID = 1001
@@ -62,6 +63,7 @@ class PerformanceMonitorService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!isRunning) {
             isRunning = true
+            serviceStartTime = System.currentTimeMillis()
             createNotificationChannel()
             
             // Start in foreground immediately to satisfy Android OS requirements
@@ -105,7 +107,7 @@ class PerformanceMonitorService : Service() {
         val ramUsedGb = stats.usedMemoryBytes / 1024f / 1024f / 1024f
         val ramTotalGb = stats.totalMemoryBytes / 1024f / 1024f / 1024f
 
-        val title = "PerfStream Live Monitor"
+        val title = "SchoenMon Live Monitor"
         val content = String.format(
             Locale.US,
             "CPU: %.0f%% | NET: ↓%s ↑%s | RAM: %.1fG/%.1fG",
@@ -135,6 +137,9 @@ class PerformanceMonitorService : Service() {
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setWhen(serviceStartTime)
+            .setShowWhen(false)
+            .setOnlyAlertOnce(true)
             .build()
     }
 
