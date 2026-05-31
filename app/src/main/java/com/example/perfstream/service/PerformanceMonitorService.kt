@@ -170,55 +170,67 @@ class PerformanceMonitorService : Service() {
                 isAntiAlias = true
             }
 
-            val cpuPaint = Paint().apply {
-                color = Color.parseColor("#00E5FF") // Cyber Cyan
+            val activePaint = Paint().apply {
+                color = Color.WHITE
                 style = Paint.Style.FILL
                 isAntiAlias = true
             }
 
-            val rxPaint = Paint().apply {
-                color = Color.parseColor("#00E676") // Neo Green
-                style = Paint.Style.FILL
-                isAntiAlias = true
-            }
-
-            val txPaint = Paint().apply {
-                color = Color.parseColor("#D500F9") // Electric Pink
-                style = Paint.Style.FILL
-                isAntiAlias = true
-            }
-
-            val trackTop = 4f
-            val trackBottom = 92f
-            val trackHeight = trackBottom - trackTop // 88f
-            val cornerRadius = 4f
-
-            // 1. CPU Bar (Left)
+            // 1. CPU Bar (Left Side)
+            // Dimensions: Left = 8f, Right = 32f, Top = 8f, Bottom = 88f (Height = 80f)
             val cpuRatio = (cpuPercent / 100f).coerceIn(0f, 1f)
-            val cpuFillHeight = trackHeight * cpuRatio
-            val cpuTop = trackBottom - cpuFillHeight
-            canvas.drawRoundRect(11f, trackTop, 29f, trackBottom, cornerRadius, cornerRadius, trackPaint)
+            val cpuFillHeight = 80f * cpuRatio
+            val cpuTop = 88f - cpuFillHeight
+            canvas.drawRoundRect(8f, 8f, 32f, 88f, 6f, 6f, trackPaint)
             if (cpuFillHeight > 0) {
-                canvas.drawRoundRect(11f, cpuTop, 29f, trackBottom, cornerRadius, cornerRadius, cpuPaint)
+                canvas.drawRoundRect(8f, cpuTop, 32f, 88f, 6f, 6f, activePaint)
             }
 
-            // 2. Net RX Bar (Middle)
+            // 2. Net RX (Down Arrow - Top Right)
+            // Custom path for a geometric down arrow (from y = 8f to 44f, x = 48f to 88f)
             val rxRatio = getNetworkRatio(rxSpeed)
-            val rxFillHeight = trackHeight * rxRatio
-            val rxTop = trackBottom - rxFillHeight
-            canvas.drawRoundRect(39f, trackTop, 57f, trackBottom, cornerRadius, cornerRadius, trackPaint)
-            if (rxFillHeight > 0) {
-                canvas.drawRoundRect(39f, rxTop, 57f, trackBottom, cornerRadius, cornerRadius, rxPaint)
+            val rxAlpha = if (rxSpeed <= 0L) 30 else (30 + (rxRatio * 225f)).toInt().coerceIn(30, 255)
+            val rxPaint = Paint().apply {
+                color = Color.argb(rxAlpha, 255, 255, 255)
+                style = Paint.Style.FILL
+                isAntiAlias = true
             }
+            val rxPath = android.graphics.Path().apply {
+                // Stem
+                moveTo(60f, 8f)
+                lineTo(76f, 8f)
+                lineTo(76f, 22f)
+                lineTo(88f, 22f)
+                // Point
+                lineTo(68f, 44f)
+                lineTo(48f, 22f)
+                lineTo(60f, 22f)
+                close()
+            }
+            canvas.drawPath(rxPath, rxPaint)
 
-            // 3. Net TX Bar (Right)
+            // 3. Net TX (Up Arrow - Bottom Right)
+            // Custom path for a geometric up arrow (from y = 52f to 88f, x = 48f to 88f)
             val txRatio = getNetworkRatio(txSpeed)
-            val txFillHeight = trackHeight * txRatio
-            val txTop = trackBottom - txFillHeight
-            canvas.drawRoundRect(67f, trackTop, 85f, trackBottom, cornerRadius, cornerRadius, trackPaint)
-            if (txFillHeight > 0) {
-                canvas.drawRoundRect(67f, txTop, 85f, trackBottom, cornerRadius, cornerRadius, txPaint)
+            val txAlpha = if (txSpeed <= 0L) 30 else (30 + (txRatio * 225f)).toInt().coerceIn(30, 255)
+            val txPaint = Paint().apply {
+                color = Color.argb(txAlpha, 255, 255, 255)
+                style = Paint.Style.FILL
+                isAntiAlias = true
             }
+            val txPath = android.graphics.Path().apply {
+                // Stem
+                moveTo(60f, 88f)
+                lineTo(76f, 88f)
+                lineTo(76f, 74f)
+                lineTo(88f, 74f)
+                // Point
+                lineTo(68f, 52f)
+                lineTo(48f, 74f)
+                lineTo(60f, 74f)
+                close()
+            }
+            canvas.drawPath(txPath, txPaint)
 
             bitmap
         } catch (e: Exception) {
