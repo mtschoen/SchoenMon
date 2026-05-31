@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch on Emulator",
+      "type": "node",
+      "request": "launch",
+      "preLaunchTask": "Start Emulator",
+      "runtimeExecutable": "C:\\Users\\mtsch\\AppData\\AndroidCLI\\android.exe",
+      "runtimeArgs": [
+        "run",
+        "--activity=com.example.perfstream.MainActivity"
+      ],
+      "console": "integratedTerminal"
+    }
+  ]
+}
