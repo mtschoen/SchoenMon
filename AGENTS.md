@@ -107,8 +107,9 @@ C:\Users\mtsch\AppData\AndroidCLI\android.exe run --activity=com.example.perfstr
 
 ### Local Testing on Emulator
 For rapid local testing using the pre-configured `Medium_Phone_API_36.1` emulator:
-1. **VS Code Tasks**: Run the default task `Start Emulator and Run App` (`Ctrl+Shift+B` or through the Tasks panel). This automatically boots the emulator, waits for it to become ready, and then deploys/runs PerfStream.
-2. **Standalone Script**: Double-click or run [run-on-emulator.bat](file:///c:/Users/mtsch/AndroidPerfMonitor/run-on-emulator.bat) from any terminal:
+1. **VS Code Run & Debug (Play Button)**: In the Run & Debug panel on the left (or press `F5`), select and run **"Launch on Emulator"**. This will execute the pre-launch task to boot the emulator, wait for it to be ready, and then deploy and start the application dynamically in the terminal.
+2. **VS Code Tasks**: Run the task `Start Emulator and Run App` (`Ctrl+Shift+B` or through the Tasks panel). This boots the emulator, waits for it to become ready, and then deploys/runs PerfStream.
+3. **Standalone Script**: Double-click or run [run-on-emulator.bat](file:///c:/Users/mtsch/AndroidPerfMonitor/run-on-emulator.bat) from any terminal:
    ```cmd
    .\run-on-emulator.bat
    ```
