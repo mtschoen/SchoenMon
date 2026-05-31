@@ -5,11 +5,12 @@
       "name": "Launch on Emulator",
       "type": "node",
       "request": "launch",
-      "preLaunchTask": "Start Emulator",
+      "preLaunchTask": "Prepare Emulator and Build",
       "runtimeExecutable": "C:\\Users\\mtsch\\AppData\\AndroidCLI\\android.exe",
       "runtimeArgs": [
         "run",
-        "--activity=com.example.perfstream.MainActivity"
+        "--activity=com.example.perfstream.MainActivity",
+        "--apks=app/build/outputs/apk/debug/app-debug.apk"
       ],
       "console": "integratedTerminal"
     }

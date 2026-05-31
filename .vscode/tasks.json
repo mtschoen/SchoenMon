@@ -8,18 +8,38 @@
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
-        "panel": "new",
+        "panel": "shared",
         "group": "build"
       }
     },
     {
-      "label": "Run PerfStream",
+      "label": "Assemble APK",
       "type": "shell",
-      "command": "C:\\Users\\mtsch\\AppData\\AndroidCLI\\android.exe run --activity=com.example.perfstream.MainActivity",
+      "command": ".\\gradlew.bat assembleDebug",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
-        "panel": "new",
+        "panel": "shared",
+        "group": "build"
+      }
+    },
+    {
+      "label": "Prepare Emulator and Build",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Start Emulator",
+        "Assemble APK"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Deploy and Run App",
+      "type": "shell",
+      "command": "C:\\Users\\mtsch\\AppData\\AndroidCLI\\android.exe run --activity=com.example.perfstream.MainActivity --apks=app/build/outputs/apk/debug/app-debug.apk",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
         "group": "build"
       }
     },
@@ -28,7 +48,8 @@
       "dependsOrder": "sequence",
       "dependsOn": [
         "Start Emulator",
-        "Run PerfStream"
+        "Assemble APK",
+        "Deploy and Run App"
       ],
       "group": {
         "kind": "test",
