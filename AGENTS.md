@@ -21,7 +21,7 @@ com/example/perfstream/
 │   └── PerformanceMonitorRepository.kt # Singleton StateFlow data bus, holds current sample + rolling history
 │
 ├── service/
-│   └── PerformanceMonitorService.kt    # Foreground service containing the poll loop, dynamic notification, & bitmap icon
+│   └── PerformanceMonitorService.kt    # Foreground service: poll loop, dynamic resource-based notification icon
 │
 ├── theme/
 │   ├── Color.kt                     # Unified Obsidian and neon cyber color variables
@@ -130,10 +130,26 @@ Keep these constraints in mind to avoid regressions or unexpected behavior durin
 - **Compliance**: We declare `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_SPECIAL_USE` permissions in the manifest, configure `PerformanceMonitorService` as `foregroundServiceType="specialUse"`, and add the `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` metadata referencing performance telemetry.
 - **Rule**: Do not change this FGS configuration or remove permissions from `AndroidManifest.xml` without cross-referencing Android Play Store compliance guidelines, as it will trigger an immediate crash at startup.
 
-### Dynamic Small Notification Icons
-- **Technique**: The app dynamically draws a custom `Bitmap` displaying the current CPU load percentage, wraps it in `Icon.createWithBitmap()`, and calls `setSmallIcon(Icon)`.
-- **OEM Defect**: Certain heavily skinned Android OEM launchers (such as Samsung's One UI or Xiaomi's MIUI) discard custom bitmap icons for notifications, displaying the standard default launcher icon instead.
-- **Fallback**: The service includes a fallback to the standard launcher mipmap resource if bitmap icon generation fails or is unsupported.
+### Dynamic Small Notification Icons (Samsung One UI Constraints)
+
+**Working approach:** The service uses 11 pre-rendered vector drawable resources (`ic_stat_bars_0.xml` through `ic_stat_bars_10.xml`) and switches between them by resource ID every 2 seconds based on CPU load. Only **one notification** is posted. All stats are packed into the notification title/text.
+
+**Why only one notification:** Samsung One UI auto-groups 2+ notifications from the same app under a system-generated group summary notification. That summary uses the app's adaptive launcher mipmap icon (resource `0x7f080000`), which appears in the status bar as the Android robot head, overriding the individual notification icons. This was confirmed via `dumpsys notification` showing `icon=Icon(typ=RESOURCE pkg=... id=0x7f080000)` on the auto-generated `Aggregate_NormalNotificationSection` record.
+
+**Approaches tried and failed (do NOT re-attempt these):**
+
+| Approach | Why it fails on Samsung One UI |
+|---|---|
+| `Icon.createWithBitmap()` with `ARGB_8888` | Samsung's `AppIconSolution` intercepts bitmap-backed icons and replaces them with the adaptive launcher icon. Logcat shows: `AppIconSolution: return adaptive icon for com.sticktoitive.schoenmon` |
+| `Icon.createWithBitmap()` with `ALPHA_8` | `Canvas` cannot draw colored content onto `ALPHA_8` bitmaps; produces blank icons that fall back to launcher icon |
+| Two notifications (separate IDs, separate channels) | Android auto-groups them → group summary uses launcher mipmap → robot icon replaces both |
+| Two notifications + explicit `.setGroup(GROUP_KEY)` + custom `.setGroupSummary(true)` | Samsung shows only one icon per group in the status bar; icons alternate every few seconds |
+| Two notifications + separate group keys (each its own summary) | Samsung still auto-groups across groups from the same package; falls back to launcher icon |
+| `LevelListDrawable` via `setSmallIcon(R.drawable.ic_stat_bars, level)` | Not tested in isolation; was always combined with multi-notification approaches that failed for other reasons. May work but direct resource switching is proven safe. |
+
+**What works:** A single notification with `setSmallIcon(R.drawable.ic_stat_bars_N)` using a direct resource ID from the `BAR_ICONS` array. This survives Samsung's `AppIconSolution` interception because it's a standard resource-backed icon with no bitmap indirection.
+
+**User preference (future):** The user preferred the colored version of the bar icons over all-white. A future enhancement could bring color tinting back to the vector drawables (status bar will render them monochrome/white, but the notification shade can show the tinted version via `setColor()`).
 
 ### Data Repository Lifecycle
 - **Scope**: The rolling performance history buffer (capped at 60 entries / 2 minutes) lives purely in memory as a Singleton state in `PerformanceMonitorRepository`.
