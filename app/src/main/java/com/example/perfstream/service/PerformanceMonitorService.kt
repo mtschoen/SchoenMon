@@ -153,7 +153,7 @@ class PerformanceMonitorService : Service() {
         }
     }
 
-    private fun createMenuMetersBitmap(cpuPercent: Double, rxSpeed: Long, txSpeed: Long): Bitmap? {
+    private fun createMenuMetersBitmap(cpuPercent: Float, rxSpeed: Long, txSpeed: Long): Bitmap? {
         return try {
             val bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
@@ -189,7 +189,7 @@ class PerformanceMonitorService : Service() {
             val cornerRadius = 4f
 
             // 1. CPU Bar (Left)
-            val cpuRatio = (cpuPercent / 100.0).coerceIn(0.0, 1.0).toFloat()
+            val cpuRatio = (cpuPercent / 100f).coerceIn(0f, 1f)
             val cpuFillHeight = trackHeight * cpuRatio
             val cpuTop = trackBottom - cpuFillHeight
             canvas.drawRoundRect(11f, trackTop, 29f, trackBottom, cornerRadius, cornerRadius, trackPaint)
