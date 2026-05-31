@@ -119,8 +119,8 @@ class PerformanceMonitorService : Service() {
             Notification.Builder(this)
         }
 
-        // Try to generate a dynamic numerical status bar icon showing CPU load
-        val dynamicIconBitmap = createTextBitmap(String.format(Locale.US, "%.0f%%", cpuPercent))
+        // Try to generate a dynamic MenuMeters-style status bar icon showing CPU and network uusage
+        val dynamicIconBitmap = createMenuMetersBitmap(cpuPercent, stats.rxSpeedBytesPerSec, stats.txSpeedBytesPerSec)
         if (dynamicIconBitmap != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             builder.setSmallIcon(Icon.createWithBitmap(dynamicIconBitmap))
         } else {
@@ -153,30 +153,95 @@ class PerformanceMonitorService : Service() {
         }
     }
 
-    private fun createTextBitmap(text: String): Bitmap? {
+    private fun createMenuMetersBitmap(cpuPercent: Double, rxSpeed: Long, txSpeed: Long): Bitmap? {
         return try {
             val bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
-            
-            // Background is transparent
             canvas.drawColor(Color.TRANSPARENT)
-            
-            val paint = Paint().apply {
-                color = Color.WHITE
-                textSize = 50f
+
+            val trackPaint = Paint().apply {
+                color = Color.argb(40, 255, 255, 255)
+                style = Paint.Style.FILL
                 isAntiAlias = true
-                textAlign = Paint.Align.CENTER
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             }
 
-            // Center text vertically
-            val xPos = canvas.width / 2f
-            val yPos = (canvas.height / 2f) - ((paint.descent() + paint.ascent()) / 2f)
-            canvas.drawText(text, xPos, yPos, paint)
+            val cpuPaint = Paint().apply {
+                color = Color.parseColor("#00E5FF") // Cyber Cyan
+                style = Paint.Style.FILL
+                isAntiAlias = true
+            }
+
+            val rxPaint = Paint().apply {
+                color = Color.parseColor("#00E676") // Neo Green
+                style = Paint.Style.FILL
+                isAntiAlias = true
+            }
+
+            val txPaint = Paint().apply {
+                color = Color.parseColor("#D500F9") // Electric Pink
+                style = Paint.Style.FILL
+                isAntiAlias = true
+            }
+
+            val trackTop = 4f
+            val trackBottom = 92f
+            val trackHeight = trackBottom - trackTop // 88f
+            val cornerRadius = 4f
+
+            // 1. CPU Bar (Left)
+            val cpuRatio = (cpuPercent / 100.0).coerceIn(0.0, 1.0).toFloat()
+            val cpuFillHeight = trackHeight * cpuRatio
+            val cpuTop = trackBottom - cpuFillHeight
+            canvas.drawRoundRect(11f, trackTop, 29f, trackBottom, cornerRadius, cornerRadius, trackPaint)
+            if (cpuFillHeight > 0) {
+                canvas.drawRoundRect(11f, cpuTop, 29f, trackBottom, cornerRadius, cornerRadius, cpuPaint)
+            }
+
+            // 2. Net RX Bar (Middle)
+            val rxRatio = getNetworkRatio(rxSpeed)
+            val rxFillHeight = trackHeight * rxRatio
+            val rxTop = trackBottom - rxFillHeight
+            canvas.drawRoundRect(39f, trackTop, 57f, trackBottom, cornerRadius, cornerRadius, trackPaint)
+            if (rxFillHeight > 0) {
+                canvas.drawRoundRect(39f, rxTop, 57f, trackBottom, cornerRadius, cornerRadius, rxPaint)
+            }
+
+            // 3. Net TX Bar (Right)
+            val txRatio = getNetworkRatio(txSpeed)
+            val txFillHeight = trackHeight * txRatio
+            val txTop = trackBottom - txFillHeight
+            canvas.drawRoundRect(67f, trackTop, 85f, trackBottom, cornerRadius, cornerRadius, trackPaint)
+            if (txFillHeight > 0) {
+                canvas.drawRoundRect(67f, txTop, 85f, trackBottom, cornerRadius, cornerRadius, txPaint)
+            }
+
             bitmap
         } catch (e: Exception) {
             null
         }
+    }
+
+    private fun getNetworkRatio(speedBytesPerSec: Long): Float {
+        if (speedBytesPerSec <= 0) return 0f
+
+        // Logarithmic scale starting from 1 KB/s to 10 MB/s
+        val minSpeed = 1024.0 // 1 KB/s
+        val maxSpeed = 10.0 * 1024.0 * 1024.0 // 10 MB/s
+
+        if (speedBytesPerSec < minSpeed) {
+            // Linear scale for low speeds between 0 and 1 KB/s
+            val linearRatio = (speedBytesPerSec.toDouble() / minSpeed).toFloat()
+            // Map 0..1 KB/s to 0..0.15 of the bar height
+            return (linearRatio * 0.15f).coerceIn(0f, 0.15f)
+        }
+
+        val logMin = Math.log(minSpeed)
+        val logMax = Math.log(maxSpeed)
+        val logVal = Math.log(speedBytesPerSec.toDouble())
+
+        val logRatio = ((logVal - logMin) / (logMax - logMin)).toFloat()
+        // Map 1 KB/s..10 MB/s to 0.15f..1.0f of the bar height
+        return (0.15f + logRatio * 0.85f).coerceIn(0.15f, 1.0f)
     }
 
     private fun formatSpeed(bytesPerSec: Long): String {
