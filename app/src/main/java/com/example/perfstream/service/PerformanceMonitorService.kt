@@ -15,6 +15,8 @@ import com.example.perfstream.R
 import com.example.perfstream.core.PerformanceStats
 import com.example.perfstream.core.StatsCollector
 import com.example.perfstream.data.PerformanceMonitorRepository
+import com.example.perfstream.surface.LiveUpdateController
+import com.example.perfstream.surface.PerfSurfaces
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -95,9 +97,11 @@ class PerformanceMonitorService : Service() {
                 PerformanceMonitorRepository.updateStats(stats)
                 
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                val notification = buildNotification(stats)
-                notificationManager.notify(NOTIFICATION_ID, notification)
-                
+                notificationManager.notify(NOTIFICATION_ID, buildNotification(stats))
+
+                // Fan the same sample out to every other glanceable surface.
+                PerfSurfaces.refreshAll(applicationContext, stats)
+
                 delay(2000)
             }
         }
@@ -194,6 +198,8 @@ class PerformanceMonitorService : Service() {
         isRunning = false
         samplingJob?.cancel()
         serviceJob.cancel()
+        // Tear down the Now Bar live update so it doesn't linger after stop.
+        LiveUpdateController.cancel(applicationContext)
         super.onDestroy()
     }
 

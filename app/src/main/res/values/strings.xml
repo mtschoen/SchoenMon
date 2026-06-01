@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">SchoenMon</string>
+    <string name="widget_description">Live CPU, RAM and network on your home or lock screen</string>
+    <string name="tile_cpu_label">CPU</string>
+    <string name="tile_ram_label">RAM</string>
+    <string name="tile_net_label">Net</string>
 </resources>

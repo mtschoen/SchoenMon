@@ -151,6 +151,37 @@ Keep these constraints in mind to avoid regressions or unexpected behavior durin
 
 **User preference (future):** The user preferred the colored version of the bar icons over all-white. A future enhancement could bring color tinting back to the vector drawables (status bar will render them monochrome/white, but the notification shade can show the tinted version via `setColor()`).
 
+### Two side-by-side status bar icons from one app: NOT POSSIBLE (settled 2026-05-31)
+
+Definitively confirmed against the live OS (not lore). Modern Android (verified on the
+stock `Medium_Phone_API_36.1` emulator, SDK 36) **auto-groups** two ungrouped notifications
+from the same package under a system `AUTOGROUP_SUMMARY` record, collapsing them to a single
+status bar slot whose icon is the adaptive launcher icon (`0x7f080000`, the robot head).
+`dumpsys notification` proof: the summary record carries
+`flags=...|GROUP_SUMMARY|AUTOGROUP_SUMMARY` and `tag=...g:Aggregate_SilentSection`. So the old
+"stock Android shows separate icons per notification" advice is **stale** (true only pre-Android-7,
+before auto-grouping). It fails on stock AND Samsung. Do not reopen this; design ONE expressive
+icon instead. (Samsung additionally hard-caps the status bar to 3 icons total in One UI 7+.)
+
+### Glanceable surfaces beyond the status bar icon (added 2026-05-31)
+
+The notification status-bar icon is no longer the only way to expose live stats. Three additional
+surfaces now exist under `com.example.perfstream.surface.*`, all fed by one fan-out call,
+`PerfSurfaces.refreshAll(context, stats)`, invoked from the service sampling loop each 2s tick.
+All read from the shared `PerformanceMonitorRepository` singleton.
+
+| Surface | Class | What it is | Honest limitation |
+|---|---|---|---|
+| Quick Settings tiles | `PerfTileService` (`CpuTileService`/`RamTileService`/`NetTileService`) | 3 active QS tiles showing CPU% / RAM / Net in the One UI quick panel | Only repaints while the shade is open; active tiles get 1 update per listen cycle. Pull-to-glance, not always-on. Verified rendering in QS panel on emulator. |
+| Home/lock-screen widget | `PerfWidgetProvider` + `res/layout/widget_perf.xml` | RemoteViews widget placeable on home & lock screen, repainted every tick by the service | Only visible where placed; not an overlay over other apps. `widgetCategory="home_screen\|keyguard"`. |
+| Now Bar Live Update | `LiveUpdateController` | Android 16 `ProgressStyle` promoted-ongoing notification → surfaces in Samsung Now Bar (status bar chip + lock pill) on One UI 8+ | Still a notification (appears in shade). SDK 36+ only (runtime-guarded). Verified `flags=...\|PROMOTED_ONGOING` + `android.template=ProgressStyle` granted by OS on emulator. |
+
+Live Update gotchas (researched + verified):
+- Promotion has **no public setter** on the platform `Notification.Builder`. The `NotificationCompat.Builder#setRequestPromotedOngoing` method exists, but when using platform `Notification.Builder` (required for `ProgressStyle`), set the extra directly: `extras.putBoolean("android.requestPromotedOngoing", true)` (the `EXTRA_REQUEST_PROMOTED_ONGOING` constant is `@hide`; the string value is documented/stable).
+- Requires `<uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />` (non-runtime).
+- Channel importance must be `> IMPORTANCE_MIN` (we use `IMPORTANCE_DEFAULT`).
+- Must NOT use `setCustomContentView`/`RemoteViews` or `setColorized(true)` on the Live Update notification.
+
 ### Data Repository Lifecycle
 - **Scope**: The rolling performance history buffer (capped at 60 entries / 2 minutes) lives purely in memory as a Singleton state in `PerformanceMonitorRepository`.
 - **Behavior**: Stopping and starting the service preserves history *as long as the application process stays alive*. Killing the host application process will clear all charts. (In the future, room-based persistence could be introduced to support durable charts).
