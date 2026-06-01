@@ -149,7 +149,21 @@ Keep these constraints in mind to avoid regressions or unexpected behavior durin
 
 **What works:** A single notification with `setSmallIcon(R.drawable.ic_stat_bars_N)` using a direct resource ID from the `BAR_ICONS` array. This survives Samsung's `AppIconSolution` interception because it's a standard resource-backed icon with no bitmap indirection.
 
-**User preference (future):** The user preferred the colored version of the bar icons over all-white. A future enhancement could bring color tinting back to the vector drawables (status bar will render them monochrome/white, but the notification shade can show the tinted version via `setColor()`).
+> **UPDATE 2026-05-31 - the "bitmap icons get rewritten to the robot" claim is STALE on One UI 8.5.**
+> Re-tested on a physical Galaxy Z Fold 6 (One UI 8.5, SDK 36): a dynamically drawn
+> `Icon.createWithBitmap()` 96x96 ARGB_8888 small icon renders **correctly, in full color, with
+> live text**, in the Samsung status bar. The `AppIconSolution: return adaptive icon for ...` line
+> still appears in logcat but is a **red herring** - it does NOT actually replace our notification's
+> small icon (visually confirmed by the user: green numeric speed shows, no robot). So:
+> - **Bitmap small icons are the way to get COLOR and NUMBERS into the Samsung status bar.**
+>   Resource/vector icons are force-tinted monochrome; bitmaps keep their own colors.
+> - The app now ships two such bitmap icons (see `surface/SpeedIcon.kt` = numeric ↓rate stacked
+>   number-over-unit, and `surface/GraphIcon.kt` = CPU/RAM sparklines). Technique mirrors the
+>   open-source NetSpeed Indicator (96x96, ARGB_8888, condensed-bold number + smaller unit).
+> - The earlier all-bitmap failures were likely the *multi-notification* auto-group issue, not the
+>   bitmap itself. One bitmap-icon notification is fine.
+> - Caveat: only verified on One UI 8.5 so far; older One UI builds may differ - keep the static
+>   vector arrow (`ic_stat_net_speed`) around as a fallback if a build regresses.
 
 ### Two side-by-side status bar icons from one app: NOT POSSIBLE (settled 2026-05-31)
 

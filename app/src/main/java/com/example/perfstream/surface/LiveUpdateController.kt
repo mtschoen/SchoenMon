@@ -16,6 +16,7 @@ import com.example.perfstream.MainActivity
 import com.example.perfstream.R
 import com.example.perfstream.core.PerformanceStats
 import com.example.perfstream.core.StatFormat
+import com.example.perfstream.data.PerformanceMonitorRepository
 
 /**
  * Android 16 "Live Update" - the standardized promoted-ongoing notification
@@ -36,9 +37,16 @@ object LiveUpdateController {
     private const val LIVE_UPDATE_ID = 2001
 
     /** True on builds new enough to promote a notification to a Live Update. */
-    private val supported: Boolean
+    val supported: Boolean
         get() = Build.VERSION.SDK_INT >= 36
 
+    /**
+     * Post the CPU Live Update. On SDK 36+ One UI promotes this to its own Now
+     * Bar chip (status bar pill), which sits SEPARATELY from the regular
+     * foreground-service notification's icon - so the two read as two distinct
+     * glanceable elements rather than getting collapsed together. The regular
+     * notification carries the numeric network meter (see the service).
+     */
     fun update(context: Context, stats: PerformanceStats) {
         if (!supported) return
         if (!hasPostPermission(context)) return
@@ -73,8 +81,13 @@ object LiveUpdateController {
             .setProgressTrackerIcon(Icon.createWithResource(context, R.drawable.ic_tile_cpu))
         // ProgressStyle defaults to a max of 100, matching our percentage.
 
+        // Colored CPU (cyan) + RAM (pink) sparkline graph as the status bar icon.
+        // Bitmap keeps its colors in the One UI status bar; history comes from
+        // the shared repository's rolling buffer.
+        val graphIcon = GraphIcon.forHistory(PerformanceMonitorRepository.history.value)
+
         val builder = Notification.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_bars_5)
+            .setSmallIcon(graphIcon)
             .setColor(Color.parseColor("#00E5FF"))
             .setContentTitle("CPU ${StatFormat.cpuLabel(stats)}  RAM ${ram}%")
             .setContentText("${StatFormat.netLabel(stats)}  -  ${StatFormat.ramLabel(stats)}")

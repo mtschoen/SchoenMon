@@ -17,6 +17,7 @@ import com.example.perfstream.core.StatsCollector
 import com.example.perfstream.data.PerformanceMonitorRepository
 import com.example.perfstream.surface.LiveUpdateController
 import com.example.perfstream.surface.PerfSurfaces
+import com.example.perfstream.surface.SpeedIcon
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -38,23 +39,6 @@ class PerformanceMonitorService : Service() {
         private const val CHANNEL_ID = "perf_monitor_channel"
         private const val CHANNEL_NAME = "SchoenMon Performance"
 
-        // Pre-rendered bar icon drawables (CPU bar 0%-100% in 10% steps).
-        // Samsung One UI replaces bitmap/level-list icons with the launcher
-        // icon, so we switch between static vector drawables by resource ID.
-        private val BAR_ICONS = intArrayOf(
-            R.drawable.ic_stat_bars_0,
-            R.drawable.ic_stat_bars_1,
-            R.drawable.ic_stat_bars_2,
-            R.drawable.ic_stat_bars_3,
-            R.drawable.ic_stat_bars_4,
-            R.drawable.ic_stat_bars_5,
-            R.drawable.ic_stat_bars_6,
-            R.drawable.ic_stat_bars_7,
-            R.drawable.ic_stat_bars_8,
-            R.drawable.ic_stat_bars_9,
-            R.drawable.ic_stat_bars_10,
-        )
-        
         fun startService(context: Context) {
             val intent = Intent(context, PerformanceMonitorService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -108,9 +92,13 @@ class PerformanceMonitorService : Service() {
     }
 
     // ──────────────────────────────────────────────
-    //  Single notification with dynamic bar icon
-    //  CPU bar height changes every 2s via drawable
-    //  switching; network speeds in notification text
+    //  Regular foreground-service notification: NUMERIC NETWORK METER.
+    //  Network up/down arrow icon in the status bar; the ↓/↑ byte rates are
+    //  the prominent title text (the only place numbers are actually legible -
+    //  Samsung's AppIconSolution rewrites any bitmap-rendered numeric glyph to
+    //  the launcher icon, so numbers live in the text, not the icon). CPU now
+    //  lives in the separate promoted Live Update, so this notification gets
+    //  its own status bar icon distinct from the CPU chip.
     // ──────────────────────────────────────────────
 
     private fun buildNotification(stats: PerformanceStats): Notification {
@@ -121,21 +109,21 @@ class PerformanceMonitorService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val cpuPercent = stats.avgCpuFrequencyPercent
         val rxSpeedStr = formatSpeed(stats.rxSpeedBytesPerSec)
         val txSpeedStr = formatSpeed(stats.txSpeedBytesPerSec)
+        val cpuPercent = stats.avgCpuFrequencyPercent
         val ramUsedGb = stats.usedMemoryBytes / 1024f / 1024f / 1024f
         val ramTotalGb = stats.totalMemoryBytes / 1024f / 1024f / 1024f
 
         val title = String.format(
             Locale.US,
-            "CPU: %.0f%% | ↓%s ↑%s",
-            cpuPercent, rxSpeedStr, txSpeedStr
+            "↓%s  ↑%s",
+            rxSpeedStr, txSpeedStr
         )
         val content = String.format(
             Locale.US,
-            "RAM: %.1fG/%.1fG",
-            ramUsedGb, ramTotalGb
+            "CPU %.0f%%  -  RAM %.1f/%.1fG",
+            cpuPercent, ramUsedGb, ramTotalGb
         )
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -145,10 +133,9 @@ class PerformanceMonitorService : Service() {
             Notification.Builder(this)
         }
 
-        // Pick the right bar icon based on CPU load (0-10 → 0%-100%)
-        val cpuLevel = (cpuPercent / 10f).toInt().coerceIn(0, 10)
-        builder.setSmallIcon(BAR_ICONS[cpuLevel])
-        builder.setColor(Color.parseColor("#00E5FF")) // Cyber Cyan accent
+        // Dynamic numeric icon: download rate as number-over-unit (e.g. 1.1 / M/s).
+        builder.setSmallIcon(SpeedIcon.forSpeed(stats.rxSpeedBytesPerSec))
+        builder.setColor(Color.parseColor("#00E676")) // Neo Green = network
 
         return builder
             .setContentTitle(title)
