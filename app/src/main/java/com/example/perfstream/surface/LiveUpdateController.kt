@@ -16,7 +16,6 @@ import com.example.perfstream.MainActivity
 import com.example.perfstream.R
 import com.example.perfstream.core.PerformanceStats
 import com.example.perfstream.core.StatFormat
-import com.example.perfstream.data.PerformanceMonitorRepository
 
 /**
  * Android 16 "Live Update" - the standardized promoted-ongoing notification
@@ -81,13 +80,15 @@ object LiveUpdateController {
             .setProgressTrackerIcon(Icon.createWithResource(context, R.drawable.ic_tile_cpu))
         // ProgressStyle defaults to a max of 100, matching our percentage.
 
-        // Colored CPU (cyan) + RAM (pink) sparkline graph as the status bar icon.
-        // Bitmap keeps its colors in the One UI status bar; history comes from
-        // the shared repository's rolling buffer.
-        val graphIcon = GraphIcon.forHistory(PerformanceMonitorRepository.history.value)
+        // Colored CPU (cyan) + RAM (pink) filled bars as the status bar icon.
+        // Bitmap keeps its colors in the One UI status bar. Bars over a graph
+        // here: a sparkline is illegible shrunk into the ~24px status-bar slot,
+        // two filled bars read at a glance. The graph lives in the widget /
+        // lock screen where it has real estate.
+        val barsIcon = BarsIcon.forLoads(cpu, ram)
 
         val builder = Notification.Builder(context, CHANNEL_ID)
-            .setSmallIcon(graphIcon)
+            .setSmallIcon(barsIcon)
             .setColor(Color.parseColor("#00E5FF"))
             .setContentTitle("CPU ${StatFormat.cpuLabel(stats)}  RAM ${ram}%")
             .setContentText("${StatFormat.netLabel(stats)}  -  ${StatFormat.ramLabel(stats)}")

@@ -7,63 +7,75 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Shader
-import android.graphics.drawable.Icon
 import com.example.perfstream.core.PerformanceStats
 import com.example.perfstream.core.StatFormat
 
 /**
- * Renders CPU and RAM history as two overlaid sparkline graphs inside a
- * status-bar bitmap icon. Bitmap (not vector/resource) so the colors survive
- * the Samsung One UI status bar - confirmed on One UI 8.5. CPU is Cyber Cyan,
- * RAM is Electric Pink; each line has a faint gradient fill beneath it.
+ * Renders CPU and RAM history as two overlaid sparkline graphs. CPU is Cyber
+ * Cyan, RAM is Electric Pink; each line has a gradient fill beneath it, and the
+ * shorter of the two values is drawn last so it stays visible on top.
  *
  * Newest sample is at the right edge, so the graph scrolls left over time.
+ * Used in the home/lock-screen widget where there is real estate for a trend -
+ * NOT in the status-bar icon, where a shrunk sparkline is illegible (bars are
+ * used there instead, see [BarsIcon]).
  */
 object GraphIcon {
 
-    private const val SIZE = 96
-    private const val MAX_POINTS = 24 // enough to read a trend in a tiny icon
+    private const val MAX_POINTS = 40
 
-    private val cpuLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private fun linePaint(color: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 5f
+        strokeWidth = 4f
         strokeJoin = Paint.Join.ROUND
         strokeCap = Paint.Cap.ROUND
-        color = Color.parseColor("#00E5FF")
+        this.color = color
     }
-    private val ramLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 5f
-        strokeJoin = Paint.Join.ROUND
-        strokeCap = Paint.Cap.ROUND
-        color = Color.parseColor("#D500F9")
-    }
+
+    private val cpuColor = Color.parseColor("#00E5FF")
+    private val ramColor = Color.parseColor("#D500F9")
 
     /**
-     * Build the graph icon from sample history. Falls back to flat lines at the
-     * latest value if there is not yet enough history to draw a trend.
+     * Render the CPU+RAM history graph to a bitmap of the given pixel size.
+     * The smaller of the two latest values is drawn last (on top) so a bar that
+     * sits under the other is never fully hidden.
      */
-    fun forHistory(history: List<PerformanceStats>): Icon {
-        val bitmap = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
+    fun forHistory(history: List<PerformanceStats>, width: Int, height: Int): Bitmap {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
         val recent = history.takeLast(MAX_POINTS)
         val cpuSeries = recent.map { StatFormat.cpuPercent(it) }
         val ramSeries = recent.map { StatFormat.ramPercent(it) }
 
-        drawSeries(canvas, ramSeries, ramLine, Color.parseColor("#D500F9"))
-        drawSeries(canvas, cpuSeries, cpuLine, Color.parseColor("#00E5FF"))
+        // Draw the series with the larger latest value first, so the smaller one
+        // overlays on top and stays readable.
+        val cpuLatest = cpuSeries.lastOrNull() ?: 0
+        val ramLatest = ramSeries.lastOrNull() ?: 0
+        if (cpuLatest >= ramLatest) {
+            drawSeries(canvas, cpuSeries, cpuColor, width, height)
+            drawSeries(canvas, ramSeries, ramColor, width, height)
+        } else {
+            drawSeries(canvas, ramSeries, ramColor, width, height)
+            drawSeries(canvas, cpuSeries, cpuColor, width, height)
+        }
 
-        return Icon.createWithBitmap(bitmap)
+        return bitmap
     }
 
-    private fun drawSeries(canvas: Canvas, series: List<Int>, linePaint: Paint, lineColor: Int) {
+    private fun drawSeries(
+        canvas: Canvas,
+        series: List<Int>,
+        color: Int,
+        width: Int,
+        height: Int,
+    ) {
         if (series.isEmpty()) return
 
-        val top = 10f
-        val bottom = SIZE - 10f
-        val left = 6f
-        val right = SIZE - 6f
+        val top = 6f
+        val bottom = height - 6f
+        val left = 4f
+        val right = width - 4f
         val usableHeight = bottom - top
 
         fun xAt(index: Int): Float {
@@ -78,7 +90,7 @@ object GraphIcon {
             linePath.lineTo(xAt(i), yAt(series[i]))
         }
 
-        // Gradient fill under the line for a premium look.
+        // Gradient fill under the line.
         val fillPath = Path(linePath)
         fillPath.lineTo(xAt(series.size - 1), bottom)
         fillPath.lineTo(xAt(0), bottom)
@@ -87,12 +99,12 @@ object GraphIcon {
             style = Paint.Style.FILL
             shader = LinearGradient(
                 0f, top, 0f, bottom,
-                (lineColor and 0x00FFFFFF) or 0x66000000, // ~40% alpha at top
-                lineColor and 0x00FFFFFF,                 // transparent at bottom
+                (color and 0x00FFFFFF) or 0x73000000, // ~45% alpha at top
+                color and 0x00FFFFFF,                 // transparent at bottom
                 Shader.TileMode.CLAMP
             )
         }
         canvas.drawPath(fillPath, fillPaint)
-        canvas.drawPath(linePath, linePaint)
+        canvas.drawPath(linePath, linePaint(color))
     }
 }

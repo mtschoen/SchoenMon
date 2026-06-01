@@ -46,6 +46,11 @@ class PerfWidgetProvider : AppWidgetProvider() {
             }
         }
 
+        // Graph bitmap pixel size (scaled to fit the 40dp ImageView). Wide so
+        // the rolling history reads as a trend on the home/lock screen.
+        private const val GRAPH_W = 480
+        private const val GRAPH_H = 120
+
         private fun buildViews(context: Context, stats: PerformanceStats?): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_perf)
             if (stats == null) {
@@ -57,6 +62,11 @@ class PerfWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_ram_value, StatFormat.ramLabel(stats))
                 views.setTextViewText(R.id.widget_net_value, StatFormat.netLabel(stats))
             }
+
+            val graph = GraphIcon.forHistory(
+                PerformanceMonitorRepository.history.value, GRAPH_W, GRAPH_H
+            )
+            views.setImageViewBitmap(R.id.widget_graph, graph)
 
             val tap = PendingIntent.getActivity(
                 context,

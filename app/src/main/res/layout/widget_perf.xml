@@ -17,6 +17,15 @@
         android:textAllCaps="true"
         android:paddingBottom="6dp" />
 
+    <!-- CPU (cyan) + RAM (pink) history graph - has room to be legible here. -->
+    <ImageView
+        android:id="@+id/widget_graph"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:scaleType="fitXY"
+        android:contentDescription="@string/app_name"
+        android:paddingBottom="4dp" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
