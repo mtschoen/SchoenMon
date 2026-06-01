@@ -1,98 +1,74 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 3x1 glanceable strip: rolling sparkline on the left, three live values on a
+     single baseline on the right so it stays legible at 1 cell tall. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
     android:background="@drawable/widget_background"
-    android:padding="14dp">
+    android:padding="10dp">
+
+    <!-- CPU (cyan) + RAM (pink) rolling history; fills the strip height and
+         flexes to whatever width is left after the values. -->
+    <ImageView
+        android:id="@+id/widget_graph"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:scaleType="fitXY"
+        android:contentDescription="@string/app_name"
+        android:layout_marginEnd="12dp" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/app_name"
-        android:textColor="#8A8A93"
-        android:textSize="11sp"
-        android:letterSpacing="0.08"
-        android:textAllCaps="true"
-        android:paddingBottom="6dp" />
-
-    <!-- CPU (cyan) + RAM (pink) history graph - has room to be legible here. -->
-    <ImageView
-        android:id="@+id/widget_graph"
-        android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:scaleType="fitXY"
-        android:contentDescription="@string/app_name"
-        android:paddingBottom="4dp" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
+        android:text="CPU"
+        android:textColor="#00E5FF"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:layout_marginEnd="3dp" />
+    <TextView
+        android:id="@+id/widget_cpu_value"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp">
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="CPU"
-            android:textColor="#00E5FF"
-            android:textSize="13sp"
-            android:textStyle="bold" />
-        <TextView
-            android:id="@+id/widget_cpu_value"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="--"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp" />
-    </LinearLayout>
+        android:text="--"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        android:layout_marginEnd="12dp" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
+    <TextView
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp">
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="RAM"
-            android:textColor="#D500F9"
-            android:textSize="13sp"
-            android:textStyle="bold" />
-        <TextView
-            android:id="@+id/widget_ram_value"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="--"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp" />
-    </LinearLayout>
+        android:text="RAM"
+        android:textColor="#D500F9"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:layout_marginEnd="3dp" />
+    <TextView
+        android:id="@+id/widget_ram_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="--"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        android:layout_marginEnd="12dp" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
+    <TextView
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp">
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="NET"
-            android:textColor="#00E676"
-            android:textSize="13sp"
-            android:textStyle="bold" />
-        <TextView
-            android:id="@+id/widget_net_value"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="--"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp" />
-    </LinearLayout>
+        android:text="NET"
+        android:textColor="#00E676"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:layout_marginEnd="3dp" />
+    <TextView
+        android:id="@+id/widget_net_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="--"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp" />
 
 </LinearLayout>

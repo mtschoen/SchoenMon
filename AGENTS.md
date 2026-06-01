@@ -187,7 +187,7 @@ All read from the shared `PerformanceMonitorRepository` singleton.
 | Surface | Class | What it is | Honest limitation |
 |---|---|---|---|
 | Quick Settings tiles | `PerfTileService` (`CpuTileService`/`RamTileService`/`NetTileService`) | 3 active QS tiles showing CPU% / RAM / Net in the One UI quick panel | Only repaints while the shade is open; active tiles get 1 update per listen cycle. Pull-to-glance, not always-on. Verified rendering in QS panel on emulator. |
-| Home/lock-screen widget | `PerfWidgetProvider` + `res/layout/widget_perf.xml` | RemoteViews widget placeable on home & lock screen, repainted every tick by the service | Only visible where placed; not an overlay over other apps. `widgetCategory="home_screen\|keyguard"`. |
+| Home widget (3x1) | `PerfWidgetProvider` + `res/layout/widget_perf.xml` | RemoteViews 3x1 strip (left sparkline + inline CPU/RAM/NET values), repainted every tick by the service | Only visible where placed; not an overlay over other apps. Declares `widgetCategory="home_screen\|keyguard"` but Samsung's native lock-screen picker excludes it - home screen only on One UI (see lock-screen finding below). |
 | Now Bar Live Update | `LiveUpdateController` | Android 16 `ProgressStyle` promoted-ongoing notification → surfaces in Samsung Now Bar (status bar chip + lock pill) on One UI 8+ | Still a notification (appears in shade). SDK 36+ only (runtime-guarded). Verified `flags=...\|PROMOTED_ONGOING` + `android.template=ProgressStyle` granted by OS on emulator. |
 
 Live Update gotchas (researched + verified):
@@ -195,6 +195,26 @@ Live Update gotchas (researched + verified):
 - Requires `<uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />` (non-runtime).
 - Channel importance must be `> IMPORTANCE_MIN` (we use `IMPORTANCE_DEFAULT`).
 - Must NOT use `setCustomContentView`/`RemoteViews` or `setColorized(true)` on the Live Update notification.
+
+### Lock screen widgets: Samsung's native picker is curated, third-party AppWidgets excluded (settled 2026-06-01)
+
+Confirmed empirically on the physical Galaxy Z Fold 6 (One UI 8.5, Android 16, SDK 36, build
+`F956U1UEU3DZDP`). Our widget is already lock-screen-correct: `widget_perf_info.xml` declares
+`widgetCategory="home_screen|keyguard"`, which is the entire AOSP requirement. On a Pixel running
+Android 16 QPR2 it would appear in the lock-screen widget picker with zero extra code.
+
+Samsung does NOT honor this in their native lock-screen widget picker on One UI 8.5: the picker
+lists ONLY first-party Samsung widgets (Clock, Weather, Battery, etc.). The user confirmed our app
+(and every other third-party app) is absent from it. The 2025 "One UI 8 to support third-party
+lock-screen widgets" press was forward-looking and does not match this build's user-facing flow.
+No code change on our side can enter a picker that structurally excludes all third-party
+AppWidgets - do NOT re-attempt a Jetpack Glance rewrite or a lock-specific layout hoping to appear
+there.
+
+The ONLY route onto a Samsung lock screen is Good Lock -> LockStar (a manual, user-installed
+customization module; not present on the test device). It consumes the existing home widget as-is,
+so still zero app code. Decision: keep the `keyguard` category (free; future-proofs for Pixel/AOSP
+and for LockStar) and do NOT build a dedicated lock-screen surface.
 
 ### Data Repository Lifecycle
 - **Scope**: The rolling performance history buffer (capped at 60 entries / 2 minutes) lives purely in memory as a Singleton state in `PerformanceMonitorRepository`.
