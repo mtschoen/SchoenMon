@@ -12,18 +12,41 @@
 
 ## ⏸ RESUME HERE — session handoff (2026-06-02)
 
-**Status:** Phase A COMPLETE and verified on real hardware (Samsung Galaxy XR,
-SM-I610, SDK 34 / Android 14-based, adb-TLS). Phase B started: B1 done; render
-technique decided in principle, not yet built.
+**Status (updated 2026-06-02, session 2):** Phase A COMPLETE + verified on real
+hardware. Phase B: B0 DONE (Custom Mesh chosen), B1 DONE. B2 IN PROGRESS - a single
+ridgeline ribbon renders correctly in a grabbable volume on the SM-I610, but the
+per-core multi-lane version does NOT render (no crash, but no volume/ridgeline
+visible). Handoff details below.
 
-**Verified on the device this session:**
-- Spatial gate routes flat on phones / spatial on XR. ✅
-- Dashboard renders as a grabbable `SpatialPanel` in full space (A4 Steps 3-4). ✅
-- "Enter full space" control (NEW, not in the original task list): bottom-right
-  button shown only on XR in home space, calling
-  `LocalSpatialConfiguration.current.requestFullSpaceMode()`. Tapping it drops into
-  full space and the panel appears. ✅
-- B1 lane derivation (`RidgelineData.kt`) committed + unit-tested. ✅
+**Verified on the device, session 2:**
+- B0 spike: a hard-coded `CustomMesh` sine ribbon (FLOAT3 POSITION, 32-bit Int
+  index, `TRIANGLE_STRIP`) renders in Full Space. ✅ Custom Mesh is VIABLE.
+- Material: bare `KhronosPbrMaterial` (no normals) looks like a blotchy reflection
+  gradient; **self-lit emissive** (black base, metallic 0, roughness 1, emissive
+  cyan) gives clean flat neon. ✅
+- Single ribbon wrapped in `SceneCoreEntity(factory = { meshEntity },
+  modifier = offset().transformingMovable().resizable())` rendered WITH working
+  grab/move/resize volume chrome. ✅ (`SceneCoreEntity` is the `Volume` replacement.)
+
+**Broken / open at handoff (session 2):**
+- **Per-core multi-lane ridgeline does not render.** Reworked `RidgelineSurface.kt`
+  to: build ONE combined multi-lane mesh per 2s tick from `ridgelineLanes()` over
+  `PerformanceMonitorRepository.history`, wrap a persistent `GroupEntity` in the
+  `SceneCoreEntity` volume, and swap the lane `MeshEntity` under the group each tick.
+  Result: no crash, but nothing renders (no volume, no ridges). Suspects + likely
+  fix in `~/.claude/notes/spike_xr_custom_mesh.md` ("no volume shows" section) -
+  prime suspect is wrapping a *contentless* `GroupEntity` (no bounds) and
+  hand-parenting the mesh under it instead of letting `SceneCoreEntity` manage a
+  `MeshEntity` directly. First thing to try next session: wrap the combined lane
+  `MeshEntity` itself in the `SceneCoreEntity` (as the single ribbon did), or give
+  the group an explicit bounded size.
+- **Per-tick mesh rebuild leaks** (KNOWN, intentional): `CustomMesh.close()` aborts
+  natively if called while the retired `MeshEntity` still borrows the mesh, and the
+  borrow releases only on the entity's GC (non-deterministic). Current code never
+  closes meshes -> no crash, but ~tens of KB leak per tick. Full analysis +
+  fix ideas in the spike note. Needs a real solution before this ships.
+- On XR, per-core CPU sysfs is empty so `ridgelineLanes` uses the 4-channel
+  CPU/RAM/NET/Disk fallback - that's expected, not a bug.
 
 **Key findings (do NOT re-litigate):**
 - **No 3D in home space** on Android XR - spatial content needs Full Space (spiked
@@ -37,15 +60,28 @@ technique decided in principle, not yet built.
   depth-buffer occlusion) is the CORRECT tool, so it is the PRIMARY path. Final
   user pick was open: CustomMesh primary vs a flat-2D-album-panel stepping stone.
 
-**NEXT STEP when resuming:**
-1. **Install the real XR SDK / system image first.** This session had only the
-   Android Studio Canary IDE, not the XR system image (SDK had only
-   `android-36`/`36.1`). The *device* ran everything; emulator-side XR needs the image.
-2. Pick ridgeline render: CustomMesh ribbons (primary, experimental alpha15) vs a
-   flat-2D-album-panel first. User was reviewing `android/xr-samples` for CustomMesh.
-3. Build `RidgelineSurface` in `SpatialDashboard`'s `Subspace` (full space), fed by
-   `ridgelineLanes()` over `PerformanceMonitorRepository.history`, monochrome cyan.
+**NEXT STEP when resuming (session 3):**
+1. **Fix the "multi-lane renders nothing" regression** (the headline blocker). The
+   single ribbon rendered when the `MeshEntity` itself was wrapped in
+   `SceneCoreEntity`; it stopped when a contentless `GroupEntity` was wrapped and
+   the mesh hand-parented under it. Try wrapping the combined lane `MeshEntity`
+   directly in `SceneCoreEntity` (drop the GroupEntity), or give the group an
+   explicit bounded `.width/.height/.depth`. Deploy to SM-I610 (`adb -t <id>`,
+   enter full space, look right of the panel) to confirm. See the "no volume shows"
+   section of `~/.claude/notes/spike_xr_custom_mesh.md`.
+2. **Solve the per-tick mesh leak** (see spike note "resource-lifetime trap"): the
+   current code never closes meshes to avoid a native borrow-abort. Find a real
+   answer (updatable buffer? observe entity GC via WeakReference? pool? throttle?).
+3. Tune the look once it renders: lane spacing (`LANE_RISE`/`LANE_DEPTH`/`AMPLITUDE`
+   in `RidgelineSurface.kt`), confirm near-occludes-far reads correctly.
 4. Then the experimental-render toggle the user wanted.
+
+**Device note:** the SM-I610 connects via wireless adb-TLS and DROPS when the adb
+daemon bounces (e.g. a stray `adb` version mismatch). Reconnect from the headset's
+Wireless debugging screen; target it by `adb -t <transport_id>` (the mDNS serial
+gains a `(N)` suffix on reconnect, which is awkward to quote). applicationId is
+`com.sticktoitive.schoenmon`; launch via `adb -t <id> shell monkey -p
+com.sticktoitive.schoenmon -c android.intent.category.LAUNCHER 1`.
 
 The Phase A/B task detail below is historical; this block is the source of truth
 for "where we are."
@@ -239,12 +275,20 @@ window, lanes stacked in depth so near ridges occlude far ones.
 "pending a spike against DP4." Task B0 runs that spike and **picks the rendering
 technique**. Tasks B2/B3 are the two branches; execute only the chosen one.
 
-### Task B0: Spike - Custom Mesh viability on the live DP
+### Task B0: Spike - Custom Mesh viability on the live DP ✅ DONE 2026-06-02
+
+**DECISION: Custom Mesh is VIABLE ⇒ Phase B uses Task B2 (Custom Mesh). B3 (scaled-box) is SKIPPED.**
+A hard-coded sine ribbon (FLOAT3 POSITION, 32-bit Int index, `TRIANGLE_STRIP`)
+rendered correctly on the physical SM-I610 in Full Space, first try. Full API
+shape, gotchas, and the stale-alpha14-sources trap are in
+`~/.claude/notes/spike_xr_custom_mesh.md` (registered). One rough edge: bare
+`KhronosPbrMaterial` (no vertex normals) renders a blotchy reflection gradient -
+fix is self-lit emissive (black base, metallic 0, roughness 1, emissive cyan).
 
 **REQUIRED SUB-SKILL:** Use superpowers:running-spikes (new-project template ⇒
 announce-and-go in a scratch dir; breadcrumb to `~/.claude/notes/spike_xr_custom_mesh.md`).
 
-- [ ] **Step 1: Spike the Custom Mesh API**
+- [x] **Step 1: Spike the Custom Mesh API**
 
 In a throwaway spike (or a scratch composable behind a debug flag in this app),
 attempt to build ONE procedural ribbon mesh from a vertex/index list via the
@@ -252,15 +296,8 @@ SceneCore mesh API and apply a material with `setBaseColorFactor` (verify exact
 names on the "add 3D content" reference + `android/xr-samples`). Drive it from a
 hard-coded 60-point array.
 
-- [ ] **Step 2: Decide and record**
-
-Record in the breadcrumb and here: is the Custom Mesh API present, stable enough
-to rebuild a mesh every 2s tick, and documented enough to drive confidently?
-- **Yes ⇒** Phase B uses Task B2 (Custom Mesh). Skip B3.
-- **No / too raw ⇒** Phase B uses Task B3 (scaled-box segments, stable
-  primitive). Skip B2.
-
-Write the decision into this plan (strike the unused branch) before continuing.
+- [x] **Step 2: Decide and record** - done; see the DECISION block above. Custom
+  Mesh present + renders on device ⇒ B2. B3 skipped.
 
 ### Task B1: Lane-data derivation (technique-independent, TDD)
 
@@ -404,7 +441,10 @@ git add app/src/main/java/com/example/perfstream/ui/xr/RidgelineSurface.kt app/s
 git commit -m "feat(xr): Unknown Pleasures ridgeline via Custom Mesh"
 ```
 
-### Task B3: Render ridgeline via scaled-box segments  *(only if B0 chose fallback)*
+### Task B3: Render ridgeline via scaled-box segments  *(SKIPPED - B0 chose Custom Mesh)*
+
+> **SKIPPED.** B0 confirmed Custom Mesh renders on the SM-I610, so the ridgeline
+> goes through B2. This branch is retained only as the fallback-of-record.
 
 **Files:**
 - Modify: `app/src/main/java/com/example/perfstream/ui/xr/RidgelineSurface.kt`
