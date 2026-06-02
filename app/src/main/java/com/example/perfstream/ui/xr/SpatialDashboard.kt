@@ -42,5 +42,8 @@ fun SpatialDashboard() {
                 DashboardScreen(modifier = Modifier.fillMaxSize())
             }
         }
+        // The ridgeline mesh, wrapped in its own grabbable/resizable volume beside
+        // the panel. A subspace composable, so it lives inside the Subspace DSL.
+        RidgelineSurface()
     }
 }
