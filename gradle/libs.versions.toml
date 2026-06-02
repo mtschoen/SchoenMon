@@ -13,6 +13,12 @@ junit = "4.13.2"
 kotlin = "2.3.20"
 nav3Core = "1.0.1"
 lifecycleViewmodelNav3 = "2.10.0"
+# Jetpack XR (Developer Preview). Artifacts version independently:
+# compose + runtime track alpha14, scenecore is one ahead at alpha15 (verified
+# against the AndroidX release notes 2026-06-02). Re-check when bumping.
+xrCompose = "1.0.0-alpha14"
+xrRuntime = "1.0.0-alpha14"
+xrSceneCore = "1.0.0-alpha15"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
@@ -36,6 +42,11 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "nav3Core" }
 androidx-navigation3-ui = { module = "androidx.navigation3:navigation3-ui", version.ref = "nav3Core" }
 androidx-lifecycle-viewmodel-navigation3 = { module = "androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "lifecycleViewmodelNav3" }
+androidx-xr-compose = { module = "androidx.xr.compose:compose", version.ref = "xrCompose" }
+androidx-xr-compose-testing = { module = "androidx.xr.compose:compose-testing", version.ref = "xrCompose" }
+androidx-xr-runtime = { module = "androidx.xr.runtime:runtime", version.ref = "xrRuntime" }
+androidx-xr-runtime-testing = { module = "androidx.xr.runtime:runtime-testing", version.ref = "xrRuntime" }
+androidx-xr-scenecore = { module = "androidx.xr.scenecore:scenecore", version.ref = "xrSceneCore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }

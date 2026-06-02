@@ -84,52 +84,28 @@ existing dashboard renders byte-for-byte as today. On a spatial target, the same
 dashboard renders inside a grabbable `SpatialPanel`. Proves the toolchain end to
 end. Low risk.
 
-### Task A1: Pin Jetpack XR dependency versions
+### Task A1: Pin Jetpack XR dependency versions ✅ DONE 2026-06-02
 
 **Files:**
-- Modify: `app/build.gradle.kts`
+- Modify: `gradle/libs.versions.toml`, `app/build.gradle.kts`
 
-- [ ] **Step 1: Look up current versions**
+**Resolved versions** (AndroidX release notes, 2026-06-02; artifacts version on
+independent trains - compose+runtime on alpha14, scenecore one ahead at alpha15;
+`compose:1.0.0-alpha14` transitively depends on `scenecore:1.0.0-alpha15`,
+confirming the cross-train pairing):
+- `androidx.xr.compose:compose` / `compose-testing` = `1.0.0-alpha14`
+- `androidx.xr.runtime:runtime` / `runtime-testing` = `1.0.0-alpha14`
+- `androidx.xr.scenecore:scenecore` = `1.0.0-alpha15`
 
-Fetch each release-notes page and record the latest version string for:
-- `androidx.xr.compose:compose`
-- `androidx.xr.scenecore:scenecore`
-- `androidx.xr.runtime:runtime` (and any `runtime-*` companion the compose
-  artifact's release notes say it requires)
+**Deviation from draft:** added via the existing version catalog
+(`gradle/libs.versions.toml` → `libs.androidx.xr.*`) instead of raw coordinate
+strings, matching the project's established `libs.*` convention. Intent (these
+three artifacts, these versions) is unchanged.
 
-URLs: see "Canonical references" above. Use the **same version channel**
-(all `alpha`/`dev` of the same train) the Compose-for-XR notes pair together -
-the release-notes "Declaring dependencies" snippet is the source of truth for
-which artifacts version together. Record the resolved strings in this task's
-checkbox text before moving on.
-
-- [ ] **Step 2: Add the dependencies**
-
-In `app/build.gradle.kts` `dependencies { }`, add (substitute the pinned
-versions from Step 1; the strings below are placeholders to be replaced):
-
-```kotlin
-// Jetpack XR (Developer Preview) - versions pinned in Task A1 Step 1.
-implementation("androidx.xr.compose:compose:<PIN>")
-implementation("androidx.xr.scenecore:scenecore:<PIN>")
-implementation("androidx.xr.runtime:runtime:<PIN>")
-```
-
-Confirm `compileSdk`/`targetSdk` are 36 (they already are per AGENTS.md) and
-`minSdk` is unchanged - XR artifacts must not raise the floor for phone builds.
-
-- [ ] **Step 3: Sync / resolve**
-
-Run: `.\gradlew.bat :app:dependencies --configuration debugRuntimeClasspath -q`
-Expected: resolves with no "Could not find androidx.xr..." errors. If a version
-is unresolvable, the channel was mismatched - return to Step 1.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add app/build.gradle.kts
-git commit -m "build: add Jetpack XR dependencies (pinned DP versions)"
-```
+- [x] **Step 1: Look up current versions** - resolved above.
+- [x] **Step 2: Add the dependencies** - catalog entries + `implementation`/`testImplementation` wiring in `app/build.gradle.kts`. `compileSdk`/`targetSdk` 36, `minSdk` 24 unchanged (XR libs did not raise the floor).
+- [x] **Step 3: Sync / resolve** - `:app:dependencies` resolved all XR artifacts cleanly; full `assembleDebug` BUILD SUCCESSFUL. Note: two non-fatal D8 `WARNING`s about `com.google.ar.core` stack-map tables come from the transitive ARCore jar (`scenecore` → `arcore:1.0.0-alpha14`); cosmetic, build passes. Relevant to Phase B (ridgeline uses scenecore).
+- [x] **Step 4: Commit**
 
 ### Task A2: Manifest entries for spatial launch
 

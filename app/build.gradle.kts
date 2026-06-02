@@ -82,4 +82,13 @@ dependencies {
   implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+
+  // Jetpack XR (Developer Preview) - spatial build for Galaxy XR. Additive and
+  // phone-safe; gated at runtime by LocalSpatialCapabilities. See
+  // docs/superpowers/plans/2026-06-02-perfstream-xr.md.
+  implementation(libs.androidx.xr.compose)
+  implementation(libs.androidx.xr.scenecore)
+  implementation(libs.androidx.xr.runtime)
+  testImplementation(libs.androidx.xr.compose.testing)
+  testImplementation(libs.androidx.xr.runtime.testing)
 }
