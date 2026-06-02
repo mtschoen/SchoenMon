@@ -112,44 +112,26 @@ three artifacts, these versions) is unchanged.
 **Files:**
 - Modify: `app/src/main/AndroidManifest.xml`
 
-- [ ] **Step 1: Verify required manifest entries against the live reference**
+**Entries added** (verified verbatim against the official `android/xr-samples`
+manifest, 2026-06-02 - the docs pages punted, the sample is the source of truth):
+- `<uses-feature android:name="android.software.xr.api.spatial" android:required="false" />`
+  (manifest level) - declares spatial use without blocking phone installs.
+- `<property android:name="android.window.PROPERTY_XR_ACTIVITY_START_MODE"`
+  `android:value="XR_ACTIVITY_START_MODE_HOME_SPACE_MANAGED" />` (first child of
+  `<application>`) - launches as a 2D panel; on XR it floats and can be promoted to
+  full space. Same value the official hybrid sample uses; ignored on non-XR.
 
-On the "Develop UI for XR" page (URL above), find the manifest requirements for
-an Android XR app (the `<property>`/`<uses-feature>` the SDK requires to enable
-spatial, and the XR `<activity>` config). Record exactly what the current DP
-requires - this has changed across previews.
+**Deliberately deferred:** `enableOnBackInvokedCallback="true"` on the activity.
+It is only "recommended" for `SpatialPanel` GNav back events (spatial path,
+untestable without a headset) and it changes phone back-dispatch behavior, which
+would weaken the flat-regression guarantee. Add it with the spatial work once
+testable on the device.
 
-- [ ] **Step 2: Add the entries**
-
-Inside `<application>` (or `<activity>` as the reference dictates), add the
-XR enablement entries identified in Step 1. They must be **additive and
-phone-safe**: a non-XR device must ignore them and launch the flat app normally.
-Do NOT mark XR as `required="true"` on any `<uses-feature>` - that would hide the
-app from phones on the Play Store.
-
-- [ ] **Step 3: Build to confirm the manifest merges**
-
-Run: `.\gradlew.bat assembleDebug -q`
-Expected: BUILD SUCCESSFUL, no manifest-merger errors.
-
-- [ ] **Step 4: Regression-test the flat app on a phone**
-
-Install on a connected Fold and confirm the app still launches to the existing
-dashboard and the service goes foreground:
-
-```bash
-adb -s RFCRB0G5DLW install -r -d app/build/outputs/apk/debug/app-debug.apk
-adb -s RFCRB0G5DLW shell am start -n com.sticktoitive.schoenmon/com.example.perfstream.MainActivity
-adb -s RFCRB0G5DLW shell dumpsys activity services com.sticktoitive.schoenmon | grep isForeground
-```
-Expected: app shows the normal dashboard; `isForeground=true`.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add app/src/main/AndroidManifest.xml
-git commit -m "build: add Android XR manifest enablement entries"
-```
+- [x] **Step 1: Verify required manifest entries** - via `android/xr-samples`.
+- [x] **Step 2: Add the entries** - both phone-safe / install-only; no `required="true"`.
+- [x] **Step 3: Build confirms manifest merges** - BUILD SUCCESSFUL, no merger errors.
+- [x] **Step 4: Regression-test flat app on Fold 3** - `isForeground=true`; notification ticks live on wake (CPU 61%→71%), confirming the flat path is intact AND the battery fix still pauses/resumes with XR deps in.
+- [x] **Step 5: Commit**
 
 ### Task A3: Spatial-capability gate (`PerfStreamRoot`)
 
