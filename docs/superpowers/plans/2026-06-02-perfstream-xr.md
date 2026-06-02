@@ -1,0 +1,579 @@
+# PerfStream-XR Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Ship a spatial build of PerfStream for Samsung Galaxy XR (Android XR) from the same app module/APK that runs flat on phones: the existing 2D dashboard floating as a grabbable `SpatialPanel`, plus an "Unknown Pleasures" stacked-ridgeline surface of per-CPU-core load history.
+
+**Architecture:** One app module, not a fork. Add Jetpack XR (`androidx.xr.compose` + `androidx.xr.scenecore`) to the existing module. A single spatial-capability gate (`LocalSpatialCapabilities.current.isSpatialUiEnabled`) chooses between the untouched flat `DashboardScreen` (phones, Folds, XR-2D fallback) and a `Subspace { ... }` spatial layout (Galaxy XR). The telemetry stack (`StatsCollector` → `PerformanceMonitorRepository` StateFlow → `PerformanceMonitorService`) is untouched.
+
+**Tech Stack:** Kotlin, Jetpack Compose, Jetpack XR (Compose for XR + SceneCore), existing Navigation3 host.
+
+---
+
+## ⚠️ Preview-API discipline (read before any task)
+
+Jetpack XR is a **moving Developer Preview**. Two consequences shape this plan:
+
+1. **No version numbers are hard-coded here.** Task A1 pins them from the live
+   AndroidX release notes at execution time. Do NOT trust any version string
+   from memory or training data.
+2. **Symbol names in code blocks below are best-effort against the documented DP
+   API shape, not guaranteed.** Every phase ends in a real compile/run gate.
+   When a symbol has drifted, fix it against the live reference (URLs in each
+   task) and update this plan inline - the plan is authoritative once execution
+   starts.
+
+**Canonical references to check at execution time:**
+- Compose for XR release notes: https://developer.android.com/jetpack/androidx/releases/xr-compose
+- SceneCore release notes: https://developer.android.com/jetpack/androidx/releases/xr-scenecore
+- XR runtime release notes: https://developer.android.com/jetpack/androidx/releases/xr-runtime
+- Develop UI for XR (Compose): https://developer.android.com/develop/xr/jetpack-xr-sdk/develop-ui
+- SceneCore / 3D content: https://developer.android.com/develop/xr/jetpack-xr-sdk/add-3d-content
+- Samples: https://github.com/android/xr-samples
+
+## Prerequisites (environment - confirm before Phase A)
+
+- **XR emulator OR physical Galaxy XR for spatial verification.** The SDK at
+  `C:\Users\mtsch\AppData\Local\Android\Sdk` has only `android-36`/`android-36.1`
+  and **no XR system image installed**. Spatial behavior (the gate's spatial
+  branch, the panel, the ridgeline) cannot be verified without one of:
+  (a) the Google Play XR system image + an XR AVD in Android Studio Canary, or
+  (b) the physical Galaxy XR reachable via `adb connect <ip>`.
+- **The flat-fallback path IS verifiable today** on the connected Folds
+  (`SM-F926U`, `SM-F956U1`): Phase A's core guarantee - "non-spatial devices
+  render the existing dashboard, completely unchanged" - is a regression test
+  that runs on a phone with no XR hardware.
+- This plan does NOT install the XR image or the headset connection; that is a
+  user/environment step. Phase A tasks that need spatial hardware are marked
+  **[needs XR target]**; do them when a target is available, but the flat-path
+  regression and the build itself gate without it.
+
+## Worktree
+
+Execute in a dedicated worktree off `main` (preview-API churn will be noisy):
+`feature/perfstream-xr`. The current branch `feature/glanceable-surfaces` carries
+unrelated glanceable-surface work; keep XR isolated.
+
+## File Structure
+
+- **Create** `app/src/main/java/com/example/perfstream/ui/xr/PerfStreamRoot.kt`
+  - The spatial-capability gate. One `@Composable` that branches flat vs spatial.
+    Becomes the single content entry point called from `MainActivity`.
+- **Create** `app/src/main/java/com/example/perfstream/ui/xr/SpatialDashboard.kt`
+  - The `Subspace { ... }` spatial layout: the dashboard `SpatialPanel` plus
+    (Phase B) the ridgeline surface, posed in one subspace.
+- **Create** `app/src/main/java/com/example/perfstream/ui/xr/RidgelineSurface.kt`
+  - Phase B. The per-core stacked ridgeline. Owns lane-data derivation from
+    `PerformanceMonitorRepository.history` and the SceneCore rendering (scaled-box
+    default, Custom Mesh spike-gated alternative).
+- **Modify** `app/src/main/java/com/example/perfstream/MainActivity.kt`
+  - Replace the inline `MainNavigation()` content with `PerfStreamRoot()`.
+- **Modify** `app/build.gradle.kts` (or `app/build.gradle`)
+  - Add the pinned Jetpack XR dependencies.
+- **Modify** `app/src/main/AndroidManifest.xml`
+  - Add the XR feature/property entries required to launch spatial.
+- **Untouched:** everything under `core/`, `data/`, `service/`, `surface/`,
+  `theme/`, and `ui/dashboard/DashboardScreen.kt`. The flat UI must not change.
+
+---
+
+## Phase A: Toolchain + spatial gate + dashboard as a floating panel
+
+**Goal of phase:** App compiles with Jetpack XR deps. On non-spatial devices the
+existing dashboard renders byte-for-byte as today. On a spatial target, the same
+dashboard renders inside a grabbable `SpatialPanel`. Proves the toolchain end to
+end. Low risk.
+
+### Task A1: Pin Jetpack XR dependency versions
+
+**Files:**
+- Modify: `app/build.gradle.kts`
+
+- [ ] **Step 1: Look up current versions**
+
+Fetch each release-notes page and record the latest version string for:
+- `androidx.xr.compose:compose`
+- `androidx.xr.scenecore:scenecore`
+- `androidx.xr.runtime:runtime` (and any `runtime-*` companion the compose
+  artifact's release notes say it requires)
+
+URLs: see "Canonical references" above. Use the **same version channel**
+(all `alpha`/`dev` of the same train) the Compose-for-XR notes pair together -
+the release-notes "Declaring dependencies" snippet is the source of truth for
+which artifacts version together. Record the resolved strings in this task's
+checkbox text before moving on.
+
+- [ ] **Step 2: Add the dependencies**
+
+In `app/build.gradle.kts` `dependencies { }`, add (substitute the pinned
+versions from Step 1; the strings below are placeholders to be replaced):
+
+```kotlin
+// Jetpack XR (Developer Preview) - versions pinned in Task A1 Step 1.
+implementation("androidx.xr.compose:compose:<PIN>")
+implementation("androidx.xr.scenecore:scenecore:<PIN>")
+implementation("androidx.xr.runtime:runtime:<PIN>")
+```
+
+Confirm `compileSdk`/`targetSdk` are 36 (they already are per AGENTS.md) and
+`minSdk` is unchanged - XR artifacts must not raise the floor for phone builds.
+
+- [ ] **Step 3: Sync / resolve**
+
+Run: `.\gradlew.bat :app:dependencies --configuration debugRuntimeClasspath -q`
+Expected: resolves with no "Could not find androidx.xr..." errors. If a version
+is unresolvable, the channel was mismatched - return to Step 1.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add app/build.gradle.kts
+git commit -m "build: add Jetpack XR dependencies (pinned DP versions)"
+```
+
+### Task A2: Manifest entries for spatial launch
+
+**Files:**
+- Modify: `app/src/main/AndroidManifest.xml`
+
+- [ ] **Step 1: Verify required manifest entries against the live reference**
+
+On the "Develop UI for XR" page (URL above), find the manifest requirements for
+an Android XR app (the `<property>`/`<uses-feature>` the SDK requires to enable
+spatial, and the XR `<activity>` config). Record exactly what the current DP
+requires - this has changed across previews.
+
+- [ ] **Step 2: Add the entries**
+
+Inside `<application>` (or `<activity>` as the reference dictates), add the
+XR enablement entries identified in Step 1. They must be **additive and
+phone-safe**: a non-XR device must ignore them and launch the flat app normally.
+Do NOT mark XR as `required="true"` on any `<uses-feature>` - that would hide the
+app from phones on the Play Store.
+
+- [ ] **Step 3: Build to confirm the manifest merges**
+
+Run: `.\gradlew.bat assembleDebug -q`
+Expected: BUILD SUCCESSFUL, no manifest-merger errors.
+
+- [ ] **Step 4: Regression-test the flat app on a phone**
+
+Install on a connected Fold and confirm the app still launches to the existing
+dashboard and the service goes foreground:
+
+```bash
+adb -s RFCRB0G5DLW install -r -d app/build/outputs/apk/debug/app-debug.apk
+adb -s RFCRB0G5DLW shell am start -n com.sticktoitive.schoenmon/com.example.perfstream.MainActivity
+adb -s RFCRB0G5DLW shell dumpsys activity services com.sticktoitive.schoenmon | grep isForeground
+```
+Expected: app shows the normal dashboard; `isForeground=true`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/src/main/AndroidManifest.xml
+git commit -m "build: add Android XR manifest enablement entries"
+```
+
+### Task A3: Spatial-capability gate (`PerfStreamRoot`)
+
+**Files:**
+- Create: `app/src/main/java/com/example/perfstream/ui/xr/PerfStreamRoot.kt`
+- Modify: `app/src/main/java/com/example/perfstream/MainActivity.kt`
+
+- [ ] **Step 1: Write the gate composable**
+
+Create `PerfStreamRoot.kt`. It chooses spatial vs flat at the top of the content
+tree. `LocalSpatialCapabilities.current.isSpatialUiEnabled` is the documented
+gate (verify the exact symbol on the "Develop UI for XR" page):
+
+```kotlin
+package com.example.perfstream.ui.xr
+
+import androidx.compose.runtime.Composable
+import androidx.xr.compose.spatial.LocalSpatialCapabilities
+import com.example.perfstream.MainNavigation
+
+/**
+ * Single content entry point. On a spatial-capable context (Galaxy XR with
+ * spatial UI enabled) it renders the spatial layout; everywhere else (phones,
+ * the Folds, XR 2D-fallback) it renders the existing flat app, unchanged.
+ */
+@Composable
+fun PerfStreamRoot() {
+    if (LocalSpatialCapabilities.current.isSpatialUiEnabled) {
+        SpatialDashboard()
+    } else {
+        MainNavigation()
+    }
+}
+```
+
+- [ ] **Step 2: Add a minimal `SpatialDashboard` stub so the gate compiles**
+
+Create `SpatialDashboard.kt` with a stub that just hosts the flat content in a
+panel. Fully fleshed out in Task A4; this stub keeps Task A3 independently
+compilable:
+
+```kotlin
+package com.example.perfstream.ui.xr
+
+import androidx.compose.runtime.Composable
+
+@Composable
+fun SpatialDashboard() {
+    // Filled in by Task A4.
+}
+```
+
+- [ ] **Step 3: Route MainActivity through the gate**
+
+In `MainActivity.kt`, replace the inline content with the gate. Change:
+
+```kotlin
+setContent {
+  PerfStreamTheme { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { MainNavigation() } }
+}
+```
+to:
+```kotlin
+setContent {
+  PerfStreamTheme { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { PerfStreamRoot() } }
+}
+```
+Add `import com.example.perfstream.ui.xr.PerfStreamRoot`. Leave the permission /
+service-start logic in `onCreate` exactly as-is.
+
+- [ ] **Step 4: Build**
+
+Run: `.\gradlew.bat assembleDebug -q`
+Expected: BUILD SUCCESSFUL. (If `LocalSpatialCapabilities`/`isSpatialUiEnabled`
+drifted, fix against the live reference and update Steps 1-2.)
+
+- [ ] **Step 5: Regression-test flat path on a phone**
+
+Reinstall (commands as Task A2 Step 4). The gate's `else` branch must produce the
+identical dashboard. Confirm visually it is unchanged.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add app/src/main/java/com/example/perfstream/ui/xr/PerfStreamRoot.kt app/src/main/java/com/example/perfstream/ui/xr/SpatialDashboard.kt app/src/main/java/com/example/perfstream/MainActivity.kt
+git commit -m "feat(xr): spatial-capability gate routing flat vs spatial"
+```
+
+### Task A4: Dashboard as a grabbable `SpatialPanel`
+
+**Files:**
+- Modify: `app/src/main/java/com/example/perfstream/ui/xr/SpatialDashboard.kt`
+
+- [ ] **Step 1: Implement the spatial panel**
+
+Flesh out `SpatialDashboard` to host the existing `DashboardScreen` inside a
+`Subspace { SpatialPanel { ... } }`, made grabbable/resizable. Verify the
+`Subspace`/`SpatialPanel`/`SubspaceModifier` symbols and the movable/resizable
+modifiers against the "Develop UI for XR" reference (this is the most
+DP-volatile surface in Phase A):
+
+```kotlin
+package com.example.perfstream.ui.xr
+
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.xr.compose.spatial.Subspace
+import androidx.xr.compose.subspace.SpatialPanel
+import androidx.xr.compose.subspace.layout.SubspaceModifier
+import androidx.xr.compose.subspace.layout.height
+import androidx.xr.compose.subspace.layout.movable
+import androidx.xr.compose.subspace.layout.resizable
+import androidx.xr.compose.subspace.layout.width
+import com.example.perfstream.ui.dashboard.DashboardScreen
+
+/**
+ * Galaxy XR layout. v1 = the existing flat dashboard floating as a grabbable,
+ * resizable panel. The ridgeline surface (Task B*) joins this subspace.
+ */
+@Composable
+fun SpatialDashboard() {
+    Subspace {
+        SpatialPanel(
+            modifier = SubspaceModifier
+                .width(640.dp)
+                .height(800.dp)
+                .movable()
+                .resizable()
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                // Reuse the untouched flat dashboard verbatim inside the panel.
+                DashboardScreen(modifier = Modifier.fillMaxSize())
+            }
+        }
+    }
+}
+```
+
+- [ ] **Step 2: Build**
+
+Run: `.\gradlew.bat assembleDebug -q`
+Expected: BUILD SUCCESSFUL. Fix any drifted XR symbol against the live reference,
+updating Step 1's imports/calls inline in this plan.
+
+- [ ] **Step 3: [needs XR target] Verify spatial render**
+
+With an XR emulator running or the Galaxy XR connected (`adb connect <ip>`),
+install and launch. Expected: the dashboard appears as a floating panel that can
+be grabbed and resized; all four metric cards populate (CPU may read 0% if XR
+sysfs is restricted - per spec, not a bug).
+
+- [ ] **Step 4: [needs XR target] Sanity-check the "does it install" smoke test**
+
+Per the spec, the pre-existing flat debug APK should already run as a panel on
+the headset. Confirm this build does at least as well.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/src/main/java/com/example/perfstream/ui/xr/SpatialDashboard.kt
+git commit -m "feat(xr): render dashboard as a grabbable SpatialPanel"
+```
+
+**End of Phase A.** Toolchain proven; one APK runs flat on phones and spatial on
+XR. This is a coherent, shippable milestone - a natural pause point if Phase B is
+deferred.
+
+---
+
+## Phase B: Per-core "Unknown Pleasures" ridgeline surface
+
+**Goal of phase:** A stacked ridgeline of per-CPU-core load history beside the
+panel - each core a lane, its ridge that core's load across the rolling 60-sample
+window, lanes stacked in depth so near ridges occlude far ones.
+
+**Decision gate up front:** the spec leaves "Custom Mesh vs scaled-box" open
+"pending a spike against DP4." Task B0 runs that spike and **picks the rendering
+technique**. Tasks B2/B3 are the two branches; execute only the chosen one.
+
+### Task B0: Spike - Custom Mesh viability on the live DP
+
+**REQUIRED SUB-SKILL:** Use superpowers:running-spikes (new-project template ⇒
+announce-and-go in a scratch dir; breadcrumb to `~/.claude/notes/spike_xr_custom_mesh.md`).
+
+- [ ] **Step 1: Spike the Custom Mesh API**
+
+In a throwaway spike (or a scratch composable behind a debug flag in this app),
+attempt to build ONE procedural ribbon mesh from a vertex/index list via the
+SceneCore mesh API and apply a material with `setBaseColorFactor` (verify exact
+names on the "add 3D content" reference + `android/xr-samples`). Drive it from a
+hard-coded 60-point array.
+
+- [ ] **Step 2: Decide and record**
+
+Record in the breadcrumb and here: is the Custom Mesh API present, stable enough
+to rebuild a mesh every 2s tick, and documented enough to drive confidently?
+- **Yes ⇒** Phase B uses Task B2 (Custom Mesh). Skip B3.
+- **No / too raw ⇒** Phase B uses Task B3 (scaled-box segments, stable
+  primitive). Skip B2.
+
+Write the decision into this plan (strike the unused branch) before continuing.
+
+### Task B1: Lane-data derivation (technique-independent, TDD)
+
+**Files:**
+- Create: `app/src/main/java/com/example/perfstream/ui/xr/RidgelineSurface.kt`
+- Test: `app/src/test/java/com/example/perfstream/ui/xr/RidgelineDataTest.kt`
+
+This is pure data shaping over the existing history buffer - fully testable on
+the JVM with no XR hardware. Do it TDD.
+
+- [ ] **Step 1: Write the failing test**
+
+```kotlin
+package com.example.perfstream.ui.xr
+
+import com.example.perfstream.core.PerformanceStats
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class RidgelineDataTest {
+    private fun stat(cur: List<Long>, max: List<Long>) = PerformanceStats(
+        cpuCoreFrequencies = cur, cpuMaxFreqs = max,
+        rxSpeedBytesPerSec = 0, txSpeedBytesPerSec = 0,
+        totalMemoryBytes = 0, availableMemoryBytes = 0,
+        totalDiskBytes = 0, availableDiskBytes = 0,
+    )
+
+    @Test
+    fun perCoreLoadFraction_isCurOverMax_clampedToUnit() {
+        val history = listOf(
+            stat(cur = listOf(1000L, 500L), max = listOf(2000L, 2000L)),
+            stat(cur = listOf(2000L, 0L),   max = listOf(2000L, 2000L)),
+        )
+        val lanes = ridgelineLanes(history, coreCount = 2)
+        // lane 0 = core 0 across both samples; lane 1 = core 1.
+        assertEquals(listOf(0.5f, 1.0f), lanes[0])
+        assertEquals(listOf(0.25f, 0.0f), lanes[1])
+    }
+
+    @Test
+    fun fallsBackToFourChannels_whenNoPerCoreData() {
+        val history = listOf(stat(cur = emptyList(), max = emptyList()))
+        val lanes = ridgelineLanes(history, coreCount = 0)
+        // 4 fallback lanes: CPU avg / RAM / NET / Disk - all present, never empty.
+        assertEquals(4, lanes.size)
+    }
+}
+```
+
+- [ ] **Step 2: Run it, verify it fails**
+
+Run: `.\gradlew.bat :app:testDebugUnitTest --tests "*RidgelineDataTest*"`
+Expected: FAIL - `ridgelineLanes` unresolved.
+
+- [ ] **Step 3: Implement `ridgelineLanes`**
+
+In `RidgelineSurface.kt`, add the derivation. Per-core load fraction =
+`cur/max` clamped to `[0,1]`; lane `c` = that fraction for core `c` across every
+history sample (oldest→newest). When per-core data is absent (`coreCount == 0`,
+the emulator/XR sysfs caveat), fall back to 4 lanes from the existing aggregate
+metrics so the surface still pulses:
+
+```kotlin
+package com.example.perfstream.ui.xr
+
+import com.example.perfstream.core.PerformanceStats
+
+/**
+ * Build one lane per CPU core: each lane is that core's load fraction (cur/max,
+ * clamped) across the rolling history, oldest first. When per-core frequencies
+ * are unavailable (XR/emulator sysfs restriction), fall back to four lanes from
+ * the aggregate CPU/RAM/NET/Disk signal so the ridgeline never goes flat.
+ */
+fun ridgelineLanes(history: List<PerformanceStats>, coreCount: Int): List<List<Float>> {
+    if (coreCount <= 0) return fallbackLanes(history)
+    return (0 until coreCount).map { core ->
+        history.map { s ->
+            val cur = s.cpuCoreFrequencies.getOrNull(core) ?: 0L
+            val max = s.cpuMaxFreqs.getOrNull(core) ?: 0L
+            if (max > 0L) (cur.toFloat() / max.toFloat()).coerceIn(0f, 1f) else 0f
+        }
+    }
+}
+
+private fun fallbackLanes(history: List<PerformanceStats>): List<List<Float>> {
+    fun lane(select: (PerformanceStats) -> Float) = history.map { select(it).coerceIn(0f, 1f) }
+    return listOf(
+        lane { it.avgCpuFrequencyPercent / 100f },
+        lane { if (it.totalMemoryBytes > 0) it.usedMemoryBytes.toFloat() / it.totalMemoryBytes else 0f },
+        lane { (it.rxSpeedBytesPerSec / (10f * 1024 * 1024)) }, // 10 MB/s full-scale
+        lane { if (it.totalDiskBytes > 0) it.usedDiskBytes.toFloat() / it.totalDiskBytes else 0f },
+    )
+}
+```
+
+- [ ] **Step 4: Run tests, verify pass**
+
+Run: `.\gradlew.bat :app:testDebugUnitTest --tests "*RidgelineDataTest*"`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/src/main/java/com/example/perfstream/ui/xr/RidgelineSurface.kt app/src/test/java/com/example/perfstream/ui/xr/RidgelineDataTest.kt
+git commit -m "feat(xr): per-core ridgeline lane derivation with 4-channel fallback"
+```
+
+### Task B2: Render ridgeline via Custom Mesh  *(only if B0 chose Custom Mesh)*
+
+**Files:**
+- Modify: `app/src/main/java/com/example/perfstream/ui/xr/RidgelineSurface.kt`
+- Modify: `app/src/main/java/com/example/perfstream/ui/xr/SpatialDashboard.kt`
+
+- [ ] **Step 1: Build one ridge ribbon mesh per lane**
+
+Using the exact mesh/material API confirmed in B0, write `RidgelineSurface()` (a
+spatial composable / SceneCore entity setup): for each lane, build a ribbon mesh -
+a line of `width` segments at `y = baseY + laneIndex * laneGap`, vertex height =
+`load * amplitude`, with an opaque fill skirt down to the lane's baseline so near
+lanes occlude far ones via the depth buffer. Material colour = monochrome neon
+cyan via `setBaseColorFactor`. Rebuild the meshes each tick as history scrolls
+(collect `PerformanceMonitorRepository.history` with
+`collectAsStateWithLifecycle`). Exact code is written against the B0-confirmed
+API; record it here in this step once B0 fixes the symbols.
+
+- [ ] **Step 2: Place it in the subspace beside the panel**
+
+In `SpatialDashboard`, add `RidgelineSurface()` to the `Subspace`, posed beside
+the `SpatialPanel` (offset along X; tune spacing on-device).
+
+- [ ] **Step 3: Build + [needs XR target] verify**
+
+Run: `.\gradlew.bat assembleDebug -q` (Expected: SUCCESSFUL). Then on the XR
+target confirm the stacked ridgeline renders, scrolls each 2s tick, and near
+lanes occlude far ones.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add app/src/main/java/com/example/perfstream/ui/xr/RidgelineSurface.kt app/src/main/java/com/example/perfstream/ui/xr/SpatialDashboard.kt
+git commit -m "feat(xr): Unknown Pleasures ridgeline via Custom Mesh"
+```
+
+### Task B3: Render ridgeline via scaled-box segments  *(only if B0 chose fallback)*
+
+**Files:**
+- Modify: `app/src/main/java/com/example/perfstream/ui/xr/RidgelineSurface.kt`
+- Modify: `app/src/main/java/com/example/perfstream/ui/xr/SpatialDashboard.kt`
+
+- [ ] **Step 1: Build each ridge from thin scaled boxes**
+
+Render each lane as a row of thin box entities (the rock-solid SceneCore
+primitive): one box per history point, positioned at
+`x = pointIndex * step`, `y = baseY + laneIndex * laneGap`, scaled vertically by
+`load * amplitude`, depth-stacked by lane so the depth buffer gives free
+occlusion. Reuse a per-lane pool of box entities and just rescale/reposition them
+each tick (avoid per-tick entity churn). Colour via the SceneCore material API
+confirmed in B0. Write the concrete entity setup here against that confirmed API.
+
+- [ ] **Step 2: Place it in the subspace beside the panel** (same as B2 Step 2)
+
+- [ ] **Step 3: Build + [needs XR target] verify** (same gate as B2 Step 3)
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add app/src/main/java/com/example/perfstream/ui/xr/RidgelineSurface.kt app/src/main/java/com/example/perfstream/ui/xr/SpatialDashboard.kt
+git commit -m "feat(xr): Unknown Pleasures ridgeline via scaled-box segments"
+```
+
+**End of Phase B.** Panel + ridgeline both live on the headset; flat phone build
+unchanged throughout.
+
+---
+
+## Phase C (optional, deferred): four live "now" bars
+
+Deferred from v1 per the spec to keep focus on panel + surface. When picked up:
+four live CPU/RAM/NET/Disk bars as a SceneCore accent in the same subspace, fed by
+`PerformanceMonitorRepository.stats`. Same render-technique decision as B0 applies;
+reuse the chosen primitive. Detailed tasks to be written when Phase C is scheduled.
+
+---
+
+## Definition of done (Phases A + B)
+
+- One APK; phones/Folds render the existing dashboard with **zero** visible change
+  (verified on a connected Fold).
+- On a spatial target: dashboard floats as a grabbable/resizable `SpatialPanel`,
+  with the per-core ridgeline beside it scrolling each 2s tick.
+- Telemetry stack (`core/`, `data/`, `service/`, `surface/`) untouched.
+- No XR `<uses-feature required="true">` that would hide the app from phones.
+- Branch-finish: fold durable insight (the spatial gate pattern, the B0
+  mesh-technique decision, the lane-fallback rationale) into real docs - update
+  `AGENTS.md` §2 (architecture) and add an XR section - then delete this plan.
