@@ -2,8 +2,9 @@ package com.example.perfstream.ui.xr
 
 import android.annotation.SuppressLint
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
@@ -24,7 +25,6 @@ import androidx.xr.scenecore.AlphaMode
 import androidx.xr.scenecore.ByteBufferRegion
 import androidx.xr.scenecore.CustomMesh
 import androidx.xr.scenecore.ExperimentalCustomMeshApi
-import androidx.xr.scenecore.GroupEntity
 import androidx.xr.scenecore.KhronosPbrMaterial
 import androidx.xr.scenecore.MeshEntity
 import androidx.xr.scenecore.MeshSubsetTopology
@@ -42,15 +42,23 @@ import java.nio.ByteOrder
  * One lane per CPU core (or the 4-channel CPU/RAM/NET/Disk fallback when per-core
  * frequencies are unavailable, e.g. on XR/emulator sysfs), each lane a filled ridge
  * of that signal's rolling history. Lanes are stacked in depth (and stepped up) so
- * near ridges occlude far ones via the depth buffer - the Joy Division effect.
+ * near ridges occlude far ones via the depth buffer — the Joy Division effect.
  *
  * Architecture (see `~/.claude/notes/spike_xr_custom_mesh.md`):
- * - A persistent [GroupEntity] is wrapped in a [SceneCoreEntity] volume, so the
- *   whole ridgeline carries grab/move/resize chrome and the user's pose survives
- *   data updates.
- * - [CustomMesh] is immutable, so each 2s history tick rebuilds the combined
- *   multi-lane mesh and swaps it as a child [MeshEntity] under the group (dispose
- *   old, create new). Child swaps do not disturb the parent's user-set pose.
+ * - Each history tick builds a new combined multi-lane [CustomMesh] and wraps it in
+ *   a [MeshEntity] managed directly by [SceneCoreEntity]. This is the ONLY pattern
+ *   confirmed to render on the SM-I610: wrapping the [MeshEntity] itself, not a
+ *   contentless [GroupEntity][androidx.xr.scenecore.GroupEntity] (which produced no
+ *   visible output — the group has no intrinsic geometry, so the volume collapsed).
+ * - The [SceneCoreEntity] is key-swapped on each mesh rebuild so the factory always
+ *   receives the current [MeshEntity]. This resets the user's grab pose to the
+ *   default offset — a known v1 trade-off for reliable rendering. The ridgeline's
+ *   default position (beside the panel) reapplies each tick, so it appears
+ *   stationary unless the user has actively grabbed it.
+ * - Rebuilds are throttled to every [REBUILD_EVERY_N_TICKS] history emissions (4 s
+ *   at the default 2 s poll) and capped at [MAX_MESH_REBUILDS] total to bound the
+ *   [CustomMesh] leak. We never call [CustomMesh.close] to avoid the native
+ *   borrow-abort (see spike notes). After the cap the last good frame freezes.
  *
  * MUST be called from inside a `Subspace { }`. CustomMesh is experimental
  * ([ExperimentalCustomMeshApi]); the material is self-lit emissive cyan so it reads
@@ -58,13 +66,10 @@ import java.nio.ByteOrder
  */
 @SuppressLint("RestrictedApi")
 @OptIn(ExperimentalCustomMeshApi::class)
-@Suppress("DEPRECATION") // Entity.dispose() is the SYNCHRONOUS teardown we need (see swap below)
+@Suppress("DEPRECATION") // Entity.dispose() is the SYNCHRONOUS teardown we need
 @Composable
 fun RidgelineSurface() {
     val session = LocalSession.current ?: return
-
-    // Persistent parent: this is what the volume chrome grabs; pose survives ticks.
-    val group = remember(session) { GroupEntity.create(session, "ridgeline") }
 
     // KhronosPbrMaterial.create is suspend; build + configure it off-composition.
     val material by produceState<KhronosPbrMaterial?>(null, session) {
@@ -77,53 +82,81 @@ fun RidgelineSurface() {
         }
     }
 
-    SceneCoreEntity(
-        factory = { group },
-        modifier = SubspaceModifier
-            .offset(x = 620.dp, y = 0.dp, z = 0.dp) // right of the panel; grab to move
-            .width(1000.dp)  // ~1 m wide ridgeline - chrome bounds for the contentless group
-            .height(520.dp)
-            .depth(360.dp)
-            .transformingMovable()
-            .resizable(),
-    )
+    // Reactive mesh from the history flow. Each emission is a new mesh + unique tick
+    // ID for key-swapping the SceneCoreEntity. Throttled + capped to bound the leak.
+    val meshTick by produceState<RidgelineTick?>(null, session) {
+        var ticksSinceLastBuild = REBUILD_EVERY_N_TICKS - 1 // so first emission builds
+        var meshCount = 0
+        PerformanceMonitorRepository.history.collect { history ->
+            if (meshCount >= MAX_MESH_REBUILDS) return@collect // freeze
+            ticksSinceLastBuild++
+            if (ticksSinceLastBuild < REBUILD_EVERY_N_TICKS) return@collect // throttle
+            ticksSinceLastBuild = 0
 
-    // Rebuild the lane geometry each history tick and swap it under the group.
-    material?.let { readyMaterial ->
-        LaunchedEffect(group, readyMaterial) {
-            var previousEntity: MeshEntity? = null
-            try {
-                PerformanceMonitorRepository.history.collect { history ->
-                    val coreCount = history.lastOrNull()?.cpuMaxFreqs?.size ?: 0
-                    val lanes = ridgelineLanes(history, coreCount)
-                    val mesh = buildRidgelineMesh(session, lanes) ?: return@collect
-                    val entity = MeshEntity.create(
-                        session, mesh, listOf(readyMaterial), 0, Pose.Identity, group,
-                    )
-                    previousEntity?.dispose() // stop rendering the old ridge
-                    previousEntity = entity
-                    // We deliberately never close() the replaced CustomMesh. It is a
-                    // pure manual AutoCloseable (no finalizer), and a disposed entity
-                    // releases its mesh borrow only on its own (non-deterministic) GC.
-                    // close()ing before that GC aborts natively ("owned_ptr: released
-                    // with outstanding borrowed objects"), and the release is not
-                    // observable, so no deferral is reliable. Net: each replaced mesh
-                    // leaks (~tens of KB / 2s tick) until process death. KNOWN
-                    // LIMITATION - revisit if SceneCore gains an updatable vertex
-                    // buffer or an observable entity-disposal signal.
+            val coreCount = history.lastOrNull()?.cpuMaxFreqs?.size ?: 0
+            val lanes = ridgelineLanes(history, coreCount)
+            val mesh = buildRidgelineMesh(session, lanes) ?: return@collect
+            meshCount++
+            value = RidgelineTick(mesh, meshCount.toLong())
+        }
+    }
+
+    // Retain all CustomMesh objects for the composable's lifetime. The runtime
+    // CustomMesh impl has a GC destructor (lambda$new$0) that calls
+    // nDestroyCustomMesh. If a disposed MeshEntity hasn't released its native
+    // borrow when that destructor fires, the process aborts with:
+    //   "OwnedPtr of type imp::Mesh released with 1 outstanding borrowed objects"
+    // Holding strong refs here prevents GC from collecting old meshes while any
+    // entity might still borrow them. Cost = the same intentional leak we already
+    // accept (bounded by MAX_MESH_REBUILDS), but now structurally safe.
+    val retainedMeshes = remember { mutableListOf<CustomMesh>() }
+
+    val tick = meshTick
+    val mat = material
+    if (tick != null && mat != null) {
+        // key-swap: each new tick ID destroys the old SceneCoreEntity (disposing the
+        // old MeshEntity via DisposableEffect) and recreates with the new mesh. This
+        // is the ONLY pattern confirmed to render on the SM-I610 — wrapping the
+        // MeshEntity directly in SceneCoreEntity, not a GroupEntity intermediary.
+        key(tick.id) {
+            // Park this mesh in the retained list BEFORE it could become unreferenced.
+            remember { retainedMeshes.add(tick.mesh) }
+
+            val entity = remember {
+                MeshEntity.create(session, tick.mesh, listOf(mat), 0, Pose.Identity)
+            }
+            SceneCoreEntity(
+                factory = { entity },
+                modifier = SubspaceModifier
+                    .offset(x = 620.dp, y = 0.dp, z = 0.dp) // right of the panel
+                    .width(1000.dp)
+                    .height(520.dp)
+                    .depth(360.dp)
+                    .transformingMovable()
+                    .resizable(),
+            )
+            DisposableEffect(Unit) {
+                onDispose {
+                    entity.dispose()
+                    // Do NOT close() the CustomMesh or remove it from retainedMeshes.
+                    // The entity's native borrow is released on its own GC (non-
+                    // deterministic), and the mesh's GC destructor would abort if it
+                    // fires first. Retaining prevents that race entirely.
                 }
-            } finally {
-                previousEntity?.dispose()
             }
         }
     }
 }
 
+// ---------------------------------------------------------------------------
+// Mesh construction
+// ---------------------------------------------------------------------------
+
 /**
  * Bake every lane into ONE mesh: each lane is a filled ridge (a waving top edge with
  * an opaque skirt to the lane baseline), positioned across X by history index,
  * stepped up in Y and back in Z by lane index so near lanes occlude far ones.
- * A single TRIANGLES subset over all lanes' quads - one material, depth-buffer
+ * A single TRIANGLES subset over all lanes' quads — one material, depth-buffer
  * occlusion (all opaque). Returns null when there is not yet enough history to draw.
  */
 @OptIn(ExperimentalCustomMeshApi::class)
@@ -134,7 +167,7 @@ private fun buildRidgelineMesh(session: Session, lanes: List<List<Float>>): Cust
     val vertexBuffer = ByteBuffer
         .allocateDirect(lanes.size * pointCount * 2 * 3 * Float.SIZE_BYTES)
         .order(ByteOrder.nativeOrder())
-    // Index count: per lane, (pointCount - 1) quads * 2 triangles * 3 indices.
+    // Index count: per lane, (pointCount - 1) quads × 2 triangles × 3 indices.
     val indexBuffer = ByteBuffer
         .allocateDirect(lanes.size * (pointCount - 1) * 6 * Int.SIZE_BYTES)
         .order(ByteOrder.nativeOrder())
@@ -172,7 +205,26 @@ private fun buildRidgelineMesh(session: Session, lanes: List<List<Float>>): Cust
         .build()
 }
 
-private const val WIDTH = 1.0f      // ridgeline width in meters
-private const val AMPLITUDE = 0.18f // peak ridge height per lane
-private const val LANE_RISE = 0.06f // each lane stepped up in Y
-private const val LANE_DEPTH = 0.05f // each lane stepped back in Z (near occludes far)
+// ---------------------------------------------------------------------------
+// Internal types + constants
+// ---------------------------------------------------------------------------
+
+/** Identifies a single ridgeline frame for key-swapping the [SceneCoreEntity]. */
+@OptIn(ExperimentalCustomMeshApi::class)
+private class RidgelineTick(val mesh: CustomMesh, val id: Long)
+
+private const val WIDTH = 1.0f        // ridgeline width in metres
+private const val AMPLITUDE = 0.18f   // peak ridge height per lane
+private const val LANE_RISE = 0.06f   // each lane stepped up in Y
+private const val LANE_DEPTH = 0.05f  // each lane stepped back in Z (near occludes far)
+
+/** Rebuild every Nth history emission (history ticks at 2 s → 4 s per rebuild). */
+private const val REBUILD_EVERY_N_TICKS = 2
+
+/**
+ * Cap total mesh rebuilds to bound the [CustomMesh] leak. At [REBUILD_EVERY_N_TICKS]
+ * = 2 (4 s/rebuild), 300 rebuilds ≈ 20 min before the last frame freezes.
+ * TODO(mesh-leak): remove this cap once SceneCore ships an updatable vertex buffer
+ *  or an observable entity-disposal signal that lets us close() retired meshes safely.
+ */
+private const val MAX_MESH_REBUILDS = 300
