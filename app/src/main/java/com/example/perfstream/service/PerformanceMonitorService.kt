@@ -5,11 +5,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import com.example.perfstream.MainActivity
 import com.example.perfstream.R
 import com.example.perfstream.core.PerformanceStats
@@ -34,6 +37,20 @@ class PerformanceMonitorService : Service() {
     private var samplingJob: Job? = null
     private var serviceStartTime: Long = 0L
 
+    // Pauses the sampling loop while the display is off: every glanceable
+    // surface (status-bar icon, Now Bar chip, widget, tiles) is invisible with
+    // the screen off, so waking the SoC every 2s to redraw them would be pure
+    // battery waste. The service stays in the foreground (notification frozen on
+    // its last frame); only the poll loop pauses. Resumes on screen-on.
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_ON -> resumeSampling()
+                Intent.ACTION_SCREEN_OFF -> pauseSampling()
+            }
+        }
+    }
+
     companion object {
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "perf_monitor_channel"
@@ -57,6 +74,7 @@ class PerformanceMonitorService : Service() {
     override fun onCreate() {
         super.onCreate()
         statsCollector = StatsCollector(this)
+        registerScreenReceiver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -69,7 +87,11 @@ class PerformanceMonitorService : Service() {
             val notification = buildNotification(initialStats)
             startForeground(NOTIFICATION_ID, notification)
 
-            startSamplingLoop()
+            // Only start the loop if the screen is on; otherwise the screen-on
+            // broadcast will start it when it's actually worth sampling.
+            if (isScreenOn()) {
+                startSamplingLoop()
+            }
         }
         return START_STICKY
     }
@@ -89,6 +111,46 @@ class PerformanceMonitorService : Service() {
                 delay(2000)
             }
         }
+    }
+
+    // ──────────────────────────────────────────────
+    //  Screen-state gating (battery)
+    // ──────────────────────────────────────────────
+
+    private fun registerScreenReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }
+        // ACTION_SCREEN_ON/OFF are protected system broadcasts, so the receiver
+        // never needs to be exported.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(screenReceiver, filter)
+        }
+    }
+
+    private fun isScreenOn(): Boolean {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        return powerManager.isInteractive
+    }
+
+    /** Screen turned off: stop sampling. The foreground notification freezes on
+     *  its last frame; the service itself stays alive. */
+    private fun pauseSampling() {
+        samplingJob?.cancel()
+        samplingJob = null
+    }
+
+    /** Screen turned on: resume sampling if we aren't already, re-baselining the
+     *  network counters so the first frame shows the live rate, not a stale
+     *  average accumulated while paused. */
+    private fun resumeSampling() {
+        if (!isRunning || samplingJob != null) return
+        statsCollector.resetNetworkBaseline()
+        startSamplingLoop()
     }
 
     // ──────────────────────────────────────────────
@@ -183,6 +245,7 @@ class PerformanceMonitorService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        runCatching { unregisterReceiver(screenReceiver) }
         samplingJob?.cancel()
         serviceJob.cancel()
         // Tear down the Now Bar live update so it doesn't linger after stop.

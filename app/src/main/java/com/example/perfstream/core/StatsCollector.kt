@@ -43,7 +43,16 @@ class StatsCollector(private val context: Context) {
     private var prevTimeMs = 0L
 
     init {
-        // Pre-initialize counters
+        resetNetworkBaseline()
+    }
+
+    /**
+     * Re-baseline the network counters to "now". Call this when resuming after a
+     * paused gap (e.g. screen was off): without it, the first post-resume sample
+     * would divide the bytes transferred during the whole gap by the elapsed
+     * time and report a misleading average rate instead of the live rate.
+     */
+    fun resetNetworkBaseline() {
         prevRxBytes = TrafficStats.getTotalRxBytes()
         prevTxBytes = TrafficStats.getTotalTxBytes()
         prevTimeMs = System.currentTimeMillis()
