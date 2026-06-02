@@ -10,6 +10,48 @@
 
 ---
 
+## ⏸ RESUME HERE — session handoff (2026-06-02)
+
+**Status:** Phase A COMPLETE and verified on real hardware (Samsung Galaxy XR,
+SM-I610, SDK 34 / Android 14-based, adb-TLS). Phase B started: B1 done; render
+technique decided in principle, not yet built.
+
+**Verified on the device this session:**
+- Spatial gate routes flat on phones / spatial on XR. ✅
+- Dashboard renders as a grabbable `SpatialPanel` in full space (A4 Steps 3-4). ✅
+- "Enter full space" control (NEW, not in the original task list): bottom-right
+  button shown only on XR in home space, calling
+  `LocalSpatialConfiguration.current.requestFullSpaceMode()`. Tapping it drops into
+  full space and the panel appears. ✅
+- B1 lane derivation (`RidgelineData.kt`) committed + unit-tested. ✅
+
+**Key findings (do NOT re-litigate):**
+- **No 3D in home space** on Android XR - spatial content needs Full Space (spiked
+  on device; `~/.claude/notes/spike_xr-homespace-volume.md`). No visionOS-style
+  shared-space volume; "auto-spatialization" only fakes a 2D stereo inset.
+- **No stable cube/box primitive** (SceneCore = GltfModelEntity / PanelEntity /
+  SurfaceEntity only; procedural geometry only via experimental `CustomMesh`).
+- **Stacked `SpatialPanel`s CANNOT produce the album occlusion** - it needs
+  transparent-above / opaque-below per ridge (per-pixel panel transparency we can't
+  rely on). `CustomMesh` (opaque fill skirt below the line, empty 3D space above,
+  depth-buffer occlusion) is the CORRECT tool, so it is the PRIMARY path. Final
+  user pick was open: CustomMesh primary vs a flat-2D-album-panel stepping stone.
+
+**NEXT STEP when resuming:**
+1. **Install the real XR SDK / system image first.** This session had only the
+   Android Studio Canary IDE, not the XR system image (SDK had only
+   `android-36`/`36.1`). The *device* ran everything; emulator-side XR needs the image.
+2. Pick ridgeline render: CustomMesh ribbons (primary, experimental alpha15) vs a
+   flat-2D-album-panel first. User was reviewing `android/xr-samples` for CustomMesh.
+3. Build `RidgelineSurface` in `SpatialDashboard`'s `Subspace` (full space), fed by
+   `ridgelineLanes()` over `PerformanceMonitorRepository.history`, monochrome cyan.
+4. Then the experimental-render toggle the user wanted.
+
+The Phase A/B task detail below is historical; this block is the source of truth
+for "where we are."
+
+---
+
 ## ⚠️ Preview-API discipline (read before any task)
 
 Jetpack XR is a **moving Developer Preview**. Two consequences shape this plan:

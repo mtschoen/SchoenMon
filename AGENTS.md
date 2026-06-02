@@ -216,6 +216,45 @@ customization module; not present on the test device). It consumes the existing 
 so still zero app code. Decision: keep the `keyguard` category (free; future-proofs for Pixel/AOSP
 and for LockStar) and do NOT build a dedicated lock-screen surface.
 
+### Android XR (Galaxy XR) spatial build (added 2026-06-02)
+
+PerfStream ships a spatial build from the SAME module/APK (code under `ui/xr/`),
+gated so phones/Folds are byte-for-byte unchanged. Phase A is complete and verified
+on a physical Galaxy XR (SM-I610, SDK 34 / Android 14-based, connected via adb-TLS).
+Active work + resume point: `docs/superpowers/plans/2026-06-02-perfstream-xr.md`
+(read its top "RESUME HERE" block first).
+
+Verified API facts (Jetpack XR Developer Preview; `androidx.xr.compose`+`runtime`
+`1.0.0-alpha14`, `scenecore` `1.0.0-alpha15`):
+- **Gate:** `LocalSpatialCapabilities.current.isSpatialUiEnabled` - package
+  `androidx.xr.compose.platform` (NOT `.spatial`). True only in Full Space.
+  `PerfStreamRoot` branches: spatial -> `SpatialDashboard`, else flat `MainNavigation`.
+- **Grabbable panel:** `SpatialPanel(SubspaceModifier...transformingMovable().resizable())`
+  in a `Subspace`. `movable()` is NOT the grab modifier; `transformingMovable()` is.
+- **Enter full space:** `LocalSpatialConfiguration.current.requestFullSpaceMode()`,
+  shown only when `hasXrSpatialFeature` so phones never render it.
+- **Manifest:** `<uses-feature android:name="android.software.xr.api.spatial" android:required="false">`
+  + `<property android:name="android.window.PROPERTY_XR_ACTIVITY_START_MODE" android:value="XR_ACTIVITY_START_MODE_HOME_SPACE_MANAGED">`. Both ignored on non-XR.
+
+Hard limitations (settled empirically - do NOT re-litigate):
+- **No 3D content in home space** - it requires Full Space. No visionOS-style
+  shared-space volume; the device's "auto-spatialization" only fakes a 2D stereo
+  inset. See `~/.claude/notes/spike_xr-homespace-volume.md`.
+- **No stable cube/box primitive** - SceneCore entities are `GltfModelEntity` /
+  `PanelEntity` / `SurfaceEntity` only; procedural geometry only via the
+  experimental `CustomMesh`/`MeshEntity`. The per-core "Unknown Pleasures" ridgeline
+  needs `CustomMesh` (stacked panels can't do the occlusion without unreliable
+  per-pixel panel transparency).
+
+### Battery: sampling pauses while the screen is off (added 2026-06-02)
+
+`PerformanceMonitorService` registers an `ACTION_SCREEN_ON`/`ACTION_SCREEN_OFF`
+receiver and fully cancels the 2s sampling loop while the display is off (every
+glanceable surface is invisible then), resuming on screen-on with a network-counter
+re-baseline (`StatsCollector.resetNetworkBaseline()`). The foreground service stays
+foreground; only the poll loop pauses. This was the primary battery-drain fix -
+verified on the Fold 3 (notification freezes across a sleep, resumes on wake).
+
 ### Data Repository Lifecycle
 - **Scope**: The rolling performance history buffer (capped at 60 entries / 2 minutes) lives purely in memory as a Singleton state in `PerformanceMonitorRepository`.
 - **Behavior**: Stopping and starting the service preserves history *as long as the application process stays alive*. Killing the host application process will clear all charts. (In the future, room-based persistence could be introduced to support durable charts).
