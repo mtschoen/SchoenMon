@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.example.perfstream.service.PerformanceMonitorService
 import com.example.perfstream.theme.PerfStreamTheme
+import com.example.perfstream.ui.xr.PerfStreamRoot
 
 class MainActivity : ComponentActivity() {
 
@@ -45,7 +46,7 @@ class MainActivity : ComponentActivity() {
 
     enableEdgeToEdge()
     setContent {
-      PerfStreamTheme { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { MainNavigation() } }
+      PerfStreamTheme { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { PerfStreamRoot() } }
     }
   }
 }

@@ -139,86 +139,21 @@ testable on the device.
 - Create: `app/src/main/java/com/example/perfstream/ui/xr/PerfStreamRoot.kt`
 - Modify: `app/src/main/java/com/example/perfstream/MainActivity.kt`
 
-- [ ] **Step 1: Write the gate composable**
+Code now lives in `PerfStreamRoot.kt` / `SpatialDashboard.kt` (stub) /
+`MainActivity.kt` - the plan no longer duplicates it.
 
-Create `PerfStreamRoot.kt`. It chooses spatial vs flat at the top of the content
-tree. `LocalSpatialCapabilities.current.isSpatialUiEnabled` is the documented
-gate (verify the exact symbol on the "Develop UI for XR" page):
+**Drift fixed during execution:** the draft imported
+`androidx.xr.compose.spatial.LocalSpatialCapabilities`; the real package is
+`androidx.xr.compose.platform.LocalSpatialCapabilities` (verified against
+`android/xr-samples` `HelloAndroidXRApp.kt`). `.current.isSpatialUiEnabled` and
+the `if/else` gate shape were correct.
 
-```kotlin
-package com.example.perfstream.ui.xr
-
-import androidx.compose.runtime.Composable
-import androidx.xr.compose.spatial.LocalSpatialCapabilities
-import com.example.perfstream.MainNavigation
-
-/**
- * Single content entry point. On a spatial-capable context (Galaxy XR with
- * spatial UI enabled) it renders the spatial layout; everywhere else (phones,
- * the Folds, XR 2D-fallback) it renders the existing flat app, unchanged.
- */
-@Composable
-fun PerfStreamRoot() {
-    if (LocalSpatialCapabilities.current.isSpatialUiEnabled) {
-        SpatialDashboard()
-    } else {
-        MainNavigation()
-    }
-}
-```
-
-- [ ] **Step 2: Add a minimal `SpatialDashboard` stub so the gate compiles**
-
-Create `SpatialDashboard.kt` with a stub that just hosts the flat content in a
-panel. Fully fleshed out in Task A4; this stub keeps Task A3 independently
-compilable:
-
-```kotlin
-package com.example.perfstream.ui.xr
-
-import androidx.compose.runtime.Composable
-
-@Composable
-fun SpatialDashboard() {
-    // Filled in by Task A4.
-}
-```
-
-- [ ] **Step 3: Route MainActivity through the gate**
-
-In `MainActivity.kt`, replace the inline content with the gate. Change:
-
-```kotlin
-setContent {
-  PerfStreamTheme { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { MainNavigation() } }
-}
-```
-to:
-```kotlin
-setContent {
-  PerfStreamTheme { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { PerfStreamRoot() } }
-}
-```
-Add `import com.example.perfstream.ui.xr.PerfStreamRoot`. Leave the permission /
-service-start logic in `onCreate` exactly as-is.
-
-- [ ] **Step 4: Build**
-
-Run: `.\gradlew.bat assembleDebug -q`
-Expected: BUILD SUCCESSFUL. (If `LocalSpatialCapabilities`/`isSpatialUiEnabled`
-drifted, fix against the live reference and update Steps 1-2.)
-
-- [ ] **Step 5: Regression-test flat path on a phone**
-
-Reinstall (commands as Task A2 Step 4). The gate's `else` branch must produce the
-identical dashboard. Confirm visually it is unchanged.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add app/src/main/java/com/example/perfstream/ui/xr/PerfStreamRoot.kt app/src/main/java/com/example/perfstream/ui/xr/SpatialDashboard.kt app/src/main/java/com/example/perfstream/MainActivity.kt
-git commit -m "feat(xr): spatial-capability gate routing flat vs spatial"
-```
+- [x] **Step 1: Write the gate composable** (`PerfStreamRoot`).
+- [x] **Step 2: `SpatialDashboard` stub** (filled by A4).
+- [x] **Step 3: Route `MainActivity` through the gate**.
+- [x] **Step 4: Build** - BUILD SUCCESSFUL.
+- [x] **Step 5: Regression-test flat path on Fold 3** - notification live (33%→45%), `MainActivity` is the ResumedActivity, no FATAL/AndroidRuntime crash. Gate routes to flat on the phone.
+- [x] **Step 6: Commit**.
 
 ### Task A4: Dashboard as a grabbable `SpatialPanel`
 
