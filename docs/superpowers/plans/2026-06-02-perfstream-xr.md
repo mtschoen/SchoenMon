@@ -160,77 +160,21 @@ the `if/else` gate shape were correct.
 **Files:**
 - Modify: `app/src/main/java/com/example/perfstream/ui/xr/SpatialDashboard.kt`
 
-- [ ] **Step 1: Implement the spatial panel**
+Code lives in `SpatialDashboard.kt`: a `Subspace { SpatialPanel(...) { Surface {
+DashboardScreen() } } }`. **Drift fixed:** draft used `.movable()`; the real
+grab-and-resize pair is `.transformingMovable().resizable()`
+(`androidx.xr.compose.subspace.layout.*`, verified against `android/xr-samples`
+panel usage).
 
-Flesh out `SpatialDashboard` to host the existing `DashboardScreen` inside a
-`Subspace { SpatialPanel { ... } }`, made grabbable/resizable. Verify the
-`Subspace`/`SpatialPanel`/`SubspaceModifier` symbols and the movable/resizable
-modifiers against the "Develop UI for XR" reference (this is the most
-DP-volatile surface in Phase A):
+- [x] **Step 1: Implement the spatial panel** - single panel hosting the untouched flat `DashboardScreen`.
+- [x] **Step 2: Build** - BUILD SUCCESSFUL; flat path still resumes clean on the Fold 3 (no regression).
+- [ ] **Step 3: [needs XR target] Verify spatial render** - panel floats / grabs / resizes; 4 cards populate (CPU may read 0% on XR). **PENDING headset/XR emulator.**
+- [ ] **Step 4: [needs XR target] "does it install" smoke test** on the headset. **PENDING.**
+- [x] **Step 5: Commit** (code + build).
 
-```kotlin
-package com.example.perfstream.ui.xr
-
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.xr.compose.spatial.Subspace
-import androidx.xr.compose.subspace.SpatialPanel
-import androidx.xr.compose.subspace.layout.SubspaceModifier
-import androidx.xr.compose.subspace.layout.height
-import androidx.xr.compose.subspace.layout.movable
-import androidx.xr.compose.subspace.layout.resizable
-import androidx.xr.compose.subspace.layout.width
-import com.example.perfstream.ui.dashboard.DashboardScreen
-
-/**
- * Galaxy XR layout. v1 = the existing flat dashboard floating as a grabbable,
- * resizable panel. The ridgeline surface (Task B*) joins this subspace.
- */
-@Composable
-fun SpatialDashboard() {
-    Subspace {
-        SpatialPanel(
-            modifier = SubspaceModifier
-                .width(640.dp)
-                .height(800.dp)
-                .movable()
-                .resizable()
-        ) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                // Reuse the untouched flat dashboard verbatim inside the panel.
-                DashboardScreen(modifier = Modifier.fillMaxSize())
-            }
-        }
-    }
-}
-```
-
-- [ ] **Step 2: Build**
-
-Run: `.\gradlew.bat assembleDebug -q`
-Expected: BUILD SUCCESSFUL. Fix any drifted XR symbol against the live reference,
-updating Step 1's imports/calls inline in this plan.
-
-- [ ] **Step 3: [needs XR target] Verify spatial render**
-
-With an XR emulator running or the Galaxy XR connected (`adb connect <ip>`),
-install and launch. Expected: the dashboard appears as a floating panel that can
-be grabbed and resized; all four metric cards populate (CPU may read 0% if XR
-sysfs is restricted - per spec, not a bug).
-
-- [ ] **Step 4: [needs XR target] Sanity-check the "does it install" smoke test**
-
-Per the spec, the pre-existing flat debug APK should already run as a panel on
-the headset. Confirm this build does at least as well.
-
-- [ ] **Step 5: Commit**
+> **Phase A is CODE-COMPLETE and builds green.** The only open items are the two
+> `[needs XR target]` spatial-render verifications - they need the Galaxy XR
+> (`adb connect`) or the XR emulator image, neither connected as of 2026-06-02.
 
 ```bash
 git add app/src/main/java/com/example/perfstream/ui/xr/SpatialDashboard.kt
