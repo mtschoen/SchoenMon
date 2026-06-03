@@ -17,6 +17,7 @@ import com.sticktoitive.schoenmon.MainActivity
 import com.sticktoitive.schoenmon.R
 import com.sticktoitive.schoenmon.core.PerformanceStats
 import com.sticktoitive.schoenmon.core.StatsCollector
+import com.sticktoitive.schoenmon.core.TickProfiler
 import com.sticktoitive.schoenmon.data.PerformanceMonitorRepository
 import com.sticktoitive.schoenmon.surface.LiveUpdateController
 import com.sticktoitive.schoenmon.surface.PerfSurfaces
@@ -36,6 +37,7 @@ class PerformanceMonitorService : Service() {
     private var isRunning = false
     private var samplingJob: Job? = null
     private var serviceStartTime: Long = 0L
+    private val profiler = TickProfiler()
 
     // Pauses the sampling loop while the display is off: every glanceable
     // surface (status-bar icon, Now Bar chip, widget, tiles) is invisible with
@@ -98,15 +100,42 @@ class PerformanceMonitorService : Service() {
 
     private fun startSamplingLoop() {
         samplingJob = serviceScope.launch {
-            while (isRunning) {
-                val stats = statsCollector.sample()
-                PerformanceMonitorRepository.updateStats(stats)
-                
-                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                notificationManager.notify(NOTIFICATION_ID, buildNotification(stats))
+            val notificationManager =
+                getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            var tickCount = 0L
 
-                // Fan the same sample out to every other glanceable surface.
-                PerfSurfaces.refreshAll(applicationContext, stats)
+            while (isRunning) {
+                profiler.beginTick()
+
+                val stats = statsCollector.sample()
+                profiler.markPhase("sample")
+
+                PerformanceMonitorRepository.updateStats(stats)
+                profiler.markPhase("repoUpdate")
+
+                val notification = buildNotification(stats)
+                profiler.markPhase("notifBuild")
+
+                // Fire-and-forget: notification IPC and surface refreshes run
+                // on the IO dispatcher and must NOT block the next sample.
+                // This is the single biggest optimisation: profiling showed
+                // notifPost + surfaces consumed ~1070ms / ~1190ms per tick.
+                val tick = tickCount++
+                launch(Dispatchers.IO) {
+                    notificationManager.notify(NOTIFICATION_ID, notification)
+
+                    // Fan the same sample out to every other glanceable surface.
+                    // Live Update is debounced (every 2nd tick) because its
+                    // ProgressStyle IPC averaged ~600ms alone.
+                    PerfSurfaces.refreshAll(
+                        applicationContext,
+                        stats,
+                        skipLiveUpdate = tick % 2 != 0L,
+                    )
+                }
+                profiler.markPhase("dispatch")
+
+                profiler.endTick()
 
                 delay(500)
             }

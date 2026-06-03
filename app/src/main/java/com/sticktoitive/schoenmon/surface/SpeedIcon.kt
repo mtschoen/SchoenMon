@@ -12,31 +12,32 @@ import java.util.Locale
  * Renders the live network speed as a status-bar icon with the number stacked
  * over the unit (e.g. "1.1" over "M/s"), the way dedicated speed-meter apps do.
  *
- * Technique mirrors the open-source NetSpeed Indicator: a 96x96 ARGB_8888
- * bitmap, number in a large condensed-bold face, unit smaller beneath, both
- * centered, wrapped via Icon.createWithBitmap(). Our project's prior notes
- * claimed Samsung's AppIconSolution rewrites bitmap-backed icons to the
- * launcher icon - but shipping speed-meter apps prove otherwise, so this is
- * the path we test. If a given One UI build does robot it, fall back to the
- * static vector arrow (ic_stat_net_speed).
+ * Technique mirrors the open-source NetSpeed Indicator: an ARGB_8888 bitmap,
+ * number in a large condensed-bold face, unit smaller beneath, both centered,
+ * wrapped via Icon.createWithBitmap(). 48×48 is the xhdpi (2×) icon size for
+ * the 24dp status-bar slot; the system upscales to xxhdpi/xxxhdpi if needed,
+ * and the text glyphs are simple enough that bilinear upscale is indiscernible.
+ * Half the pixel count of the old 96×96 = 4× less work for eraseColor + Skia.
  */
 object SpeedIcon {
 
-    private const val SIZE = 96
+    private const val SIZE = 48  // 24dp × 2 (xhdpi); was 96
 
-    // Neo Green = network, matching the dashboard's bandwidth accent. A bitmap
-    // icon keeps its own colors in the status bar (unlike vector/resource icons,
-    // which the system force-tints monochrome), so this is how we get color back.
+    // Pooled bitmap + canvas.
+    private val bitmap = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
+    private val canvas = Canvas(bitmap)
+
+    // Neo Green = network, matching the dashboard's bandwidth accent.
     private val numberPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#00E676")
-        textSize = 58f
+        textSize = 29f   // scaled from 58f at 96px → 29f at 48px
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
     }
 
     private val unitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#9DFFC9") // lighter green for the unit
-        textSize = 38f
+        color = Color.parseColor("#9DFFC9")
+        textSize = 19f   // scaled from 38f → 19f
         textAlign = Paint.Align.CENTER
         typeface = Typeface.DEFAULT_BOLD
     }
@@ -47,12 +48,9 @@ object SpeedIcon {
      */
     fun forSpeed(bytesPerSec: Long): Icon {
         val (number, unit) = splitSpeed(bytesPerSec)
-        val bitmap = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        // Number sits in the upper ~60%, unit in the lower band - baselines
-        // tuned so the pair reads as one glyph inside the small icon slot.
-        canvas.drawText(number, 48f, 50f, numberPaint)
-        canvas.drawText(unit, 48f, 92f, unitPaint)
+        bitmap.eraseColor(Color.TRANSPARENT)
+        canvas.drawText(number, 24f, 25f, numberPaint)   // centred at half-size
+        canvas.drawText(unit, 24f, 46f, unitPaint)
         return Icon.createWithBitmap(bitmap)
     }
 

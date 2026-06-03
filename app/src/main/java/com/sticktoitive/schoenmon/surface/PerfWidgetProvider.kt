@@ -26,6 +26,7 @@ class PerfWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray,
     ) {
+        invalidateCache()
         val stats = PerformanceMonitorRepository.stats.value
         for (id in appWidgetIds) {
             appWidgetManager.updateAppWidget(id, buildViews(context, stats))
@@ -33,12 +34,25 @@ class PerfWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
+        // Cached: avoids getAppWidgetIds() IPC every tick when no widget is placed.
+        @Volatile private var cachedHasWidgets = false
+        private var cacheCheckCounter = 0
+        private const val CACHE_RECHECK_INTERVAL = 60  // re-verify every 60 ticks
+
+        /** Called from onUpdate when Android notifies of widget add/remove. */
+        internal fun invalidateCache() { cachedHasWidgets = true }
+
         /** Push the latest sample to every placed instance of the widget. */
         fun update(context: Context, stats: PerformanceStats) {
+            // Fast path: skip the AppWidgetManager IPC when we know there are no widgets.
+            cacheCheckCounter++
+            if (!cachedHasWidgets && cacheCheckCounter % CACHE_RECHECK_INTERVAL != 0) return
+
             val manager = AppWidgetManager.getInstance(context) ?: return
             val ids = manager.getAppWidgetIds(
                 ComponentName(context, PerfWidgetProvider::class.java)
             )
+            cachedHasWidgets = ids.isNotEmpty()
             if (ids.isEmpty()) return
             val views = buildViews(context, stats)
             for (id in ids) {

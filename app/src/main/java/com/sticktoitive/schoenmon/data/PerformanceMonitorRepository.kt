@@ -11,17 +11,23 @@ object PerformanceMonitorRepository {
     private val _history = MutableStateFlow<List<PerformanceStats>>(emptyList())
     val history: StateFlow<List<PerformanceStats>> = _history
 
+    // Ring buffer: ArrayDeque.removeFirst() is O(1), no array copy.
+    // The old approach used toMutableList() + removeAt(0) which copied 60
+    // elements every tick.
+    private const val MAX_HISTORY = 60
+    private val ring = ArrayDeque<PerformanceStats>(MAX_HISTORY + 1)
+
     /**
      * Updates the current stats and appends to the history buffer (capped at 60 entries).
      */
     fun updateStats(newStats: PerformanceStats) {
         _stats.value = newStats
-        
-        val currentHistory = _history.value.toMutableList()
-        currentHistory.add(newStats)
-        if (currentHistory.size > 60) {
-            currentHistory.removeAt(0)
+
+        ring.addLast(newStats)
+        if (ring.size > MAX_HISTORY) {
+            ring.removeFirst()
         }
-        _history.value = currentHistory
+        _history.value = ring.toList()
     }
 }
+
