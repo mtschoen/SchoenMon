@@ -10,78 +10,102 @@
 
 ---
 
-## ⏸ RESUME HERE — session handoff (2026-06-02)
+## ⏸ RESUME HERE — session handoff (2026-06-03)
 
-**Status (updated 2026-06-02, session 2):** Phase A COMPLETE + verified on real
-hardware. Phase B: B0 DONE (Custom Mesh chosen), B1 DONE. B2 IN PROGRESS - a single
-ridgeline ribbon renders correctly in a grabbable volume on the SM-I610, but the
-per-core multi-lane version does NOT render (no crash, but no volume/ridgeline
-visible). Handoff details below.
+**Status (updated 2026-06-03, session 4):** Phase A COMPLETE. Phase B: B0 DONE,
+B1 DONE, B2 DONE — terrain-box with heat-map vertex colors, extrusion animation,
+and stable root entity renders on SM-I610. Session 3 solved the "multi-lane renders
+nothing" regression (bounds mesh pattern + direct MeshEntity root instead of
+GroupEntity). Session 4 optimized the telemetry service loop **202×** (1190ms → 5.9ms)
+via async IPC dispatch, Live Update debounce, bitmap pooling, widget IPC skip, and
+ring buffer history — but the **XR mesh rebuild path has not been profiled yet**.
 
-**Verified on the device, session 2:**
-- B0 spike: a hard-coded `CustomMesh` sine ribbon (FLOAT3 POSITION, 32-bit Int
-  index, `TRIANGLE_STRIP`) renders in Full Space. ✅ Custom Mesh is VIABLE.
-- Material: bare `KhronosPbrMaterial` (no normals) looks like a blotchy reflection
-  gradient; **self-lit emissive** (black base, metallic 0, roughness 1, emissive
-  cyan) gives clean flat neon. ✅
-- Single ribbon wrapped in `SceneCoreEntity(factory = { meshEntity },
-  modifier = offset().transformingMovable().resizable())` rendered WITH working
-  grab/move/resize volume chrome. ✅ (`SceneCoreEntity` is the `Volume` replacement.)
-
-**Broken / open at handoff (session 2):**
-- **Per-core multi-lane ridgeline does not render.** Reworked `RidgelineSurface.kt`
-  to: build ONE combined multi-lane mesh per 2s tick from `ridgelineLanes()` over
-  `PerformanceMonitorRepository.history`, wrap a persistent `GroupEntity` in the
-  `SceneCoreEntity` volume, and swap the lane `MeshEntity` under the group each tick.
-  Result: no crash, but nothing renders (no volume, no ridges). Suspects + likely
-  fix in `~/.claude/notes/spike_xr_custom_mesh.md` ("no volume shows" section) -
-  prime suspect is wrapping a *contentless* `GroupEntity` (no bounds) and
-  hand-parenting the mesh under it instead of letting `SceneCoreEntity` manage a
-  `MeshEntity` directly. First thing to try next session: wrap the combined lane
-  `MeshEntity` itself in the `SceneCoreEntity` (as the single ribbon did), or give
-  the group an explicit bounded size.
-- **Per-tick mesh rebuild leaks** (KNOWN, intentional): `CustomMesh.close()` aborts
-  natively if called while the retired `MeshEntity` still borrows the mesh, and the
-  borrow releases only on the entity's GC (non-deterministic). Current code never
-  closes meshes -> no crash, but ~tens of KB leak per tick. Full analysis +
-  fix ideas in the spike note. Needs a real solution before this ships.
-- On XR, per-core CPU sysfs is empty so `ridgelineLanes` uses the 4-channel
-  CPU/RAM/NET/Disk fallback - that's expected, not a bug.
+**What's been verified across sessions 2–4:**
+- Terrain-box renders on SM-I610: closed 6-face box, top face = height-displaced
+  grid, 4 walls + bottom, heat-map vertex colors (blue→cyan→amber→red). ✅
+- Extrusion animation: mesh starts blank, grows segment-by-segment as history fills. ✅
+- Stable root entity via bounds mesh pattern: two zero-area triangles at opposite
+  corners define the bounding box without rendering anything visible; the root is
+  never destroyed, so compositor position (user grabs/resizes) survives mesh updates. ✅
+- Material-hide cleanup for SceneCore's broken `dispose()`: swap to transparent
+  `KhronosPbrMaterial(AlphaMode.BLEND, baseColorFactor=(0,0,0,0))` before disposal. ✅
+- Telemetry service loop: notification post + surface refreshes run on `Dispatchers.IO`
+  fire-and-forget; sampling thread does only sample→repoUpdate→notifBuild→dispatch. ✅
 
 **Key findings (do NOT re-litigate):**
-- **No 3D in home space** on Android XR - spatial content needs Full Space (spiked
-  on device; `~/.claude/notes/spike_xr-homespace-volume.md`). No visionOS-style
-  shared-space volume; "auto-spatialization" only fakes a 2D stereo inset.
-- **No stable cube/box primitive** (SceneCore = GltfModelEntity / PanelEntity /
-  SurfaceEntity only; procedural geometry only via experimental `CustomMesh`).
-- **Stacked `SpatialPanel`s CANNOT produce the album occlusion** - it needs
-  transparent-above / opaque-below per ridge (per-pixel panel transparency we can't
-  rely on). `CustomMesh` (opaque fill skirt below the line, empty 3D space above,
-  depth-buffer occlusion) is the CORRECT tool, so it is the PRIMARY path. Final
-  user pick was open: CustomMesh primary vs a flat-2D-album-panel stepping stone.
+- **No 3D in home space** on Android XR — spatial content needs Full Space.
+- **No stable cube/box primitive** — SceneCore = GltfModelEntity / PanelEntity /
+  SurfaceEntity only; procedural geometry only via experimental `CustomMesh`.
+- **CustomMesh/MeshEntity lifecycle gotchas** — all documented in AGENTS.md §5.
+- **Stacked SpatialPanels CANNOT produce album occlusion** — CustomMesh is correct.
+- **`dispose()` does NOT remove children from the scene** — material-hide workaround required.
+- **`setParent()` is `@RestrictTo(LIBRARY)`** — inaccessible from app code.
 
-**NEXT STEP when resuming (session 3):**
-1. **Fix the "multi-lane renders nothing" regression** (the headline blocker). The
-   single ribbon rendered when the `MeshEntity` itself was wrapped in
-   `SceneCoreEntity`; it stopped when a contentless `GroupEntity` was wrapped and
-   the mesh hand-parented under it. Try wrapping the combined lane `MeshEntity`
-   directly in `SceneCoreEntity` (drop the GroupEntity), or give the group an
-   explicit bounded `.width/.height/.depth`. Deploy to SM-I610 (`adb -t <id>`,
-   enter full space, look right of the panel) to confirm. See the "no volume shows"
-   section of `~/.claude/notes/spike_xr_custom_mesh.md`.
-2. **Solve the per-tick mesh leak** (see spike note "resource-lifetime trap"): the
-   current code never closes meshes to avoid a native borrow-abort. Find a real
-   answer (updatable buffer? observe entity GC via WeakReference? pool? throttle?).
-3. Tune the look once it renders: lane spacing (`LANE_RISE`/`LANE_DEPTH`/`AMPLITUDE`
-   in `RidgelineSurface.kt`), confirm near-occludes-far reads correctly.
-4. Then the experimental-render toggle the user wanted.
+---
+
+### NEXT SESSION: XR Mesh Rebuild Optimization
+
+**Context:** The service-side sampling loop is now 5.9ms/tick (well within the 500ms
+budget). But `RidgelineSurface.kt`'s mesh rebuild runs in a **separate Compose
+`produceState` coroutine** (line 83–98) that collects from
+`PerformanceMonitorRepository.history`. This path has NOT been profiled. On every
+tick it:
+1. Calls `ridgelineLanes()` — data transform over history (cheap, probably <1ms)
+2. Calls `buildTerrainMesh()` — fills 3 `ByteBuffer.allocateDirect()` buffers with
+   vertex/index data for a 6-face closed box (~500+ vertices). **Suspect: direct
+   buffer allocation is expensive** (~3 allocations per tick, each requiring native
+   memory mapping).
+3. Calls `CustomMesh.FromMeshDataBuilder.build()` — **SceneCore IPC to ship vertex
+   data to the XR compositor process. Likely the dominant cost. Opaque.**
+4. Calls `MeshEntity.create()` + `setMaterial(hideMat)` + `dispose()` on the old
+   child — **entity lifecycle churn every tick**.
+
+**Approach — instrument first, then optimize (same pattern as the service loop):**
+
+1. **Drop a second `TickProfiler` instance** into the `produceState` collector:
+   ```kotlin
+   val xrProfiler = TickProfiler("SchoenMon.XR.Perf")
+   // inside the collect block:
+   xrProfiler.beginTick()
+   val lanes = ridgelineLanes(history, coreCount)
+   xrProfiler.markPhase("laneCalc")
+   val mesh = buildTerrainMesh(session, lanes) ?: return@collect
+   xrProfiler.markPhase("meshBuild")
+   // ... entity swap ...
+   xrProfiler.markPhase("entitySwap")
+   xrProfiler.endTick()
+   ```
+   Deploy to SM-I610, collect 20-tick AVG, identify which phase dominates.
+
+2. **Likely optimizations based on the service-loop precedent:**
+   - **ByteBuffer pooling:** Pre-allocate the 3 vertex buffers + index buffer at max
+     size (60 samples × 4 lanes × 6 faces ≈ known upper bound). Rewrite positions
+     into the same buffers each tick instead of `allocateDirect()`. This is the
+     exact analog of the bitmap pooling that eliminated ~300KB GC pressure per tick.
+   - **Throttle `REBUILD_EVERY_N_TICKS`:** Currently `1` (every sample). If the
+     mesh build takes >100ms, throttle to every 2nd or 4th tick — the terrain
+     animation is smooth enough at 1Hz or 2Hz, doesn't need 2Hz if the compositor
+     can't keep up.
+   - **Entity reuse:** Instead of create→hide→dispose per tick, explore whether
+     `MeshEntity` can be re-meshed in place (swap the `CustomMesh` on an existing
+     entity). If the API supports it, eliminates the entity lifecycle IPC entirely.
+   - **Async mesh build:** If `buildTerrainMesh()` is CPU-bound, move it to
+     `Dispatchers.Default` and feed the completed mesh back to the Compose context.
+     (But if the bottleneck is the SceneCore IPC in `.build()`, async won't help.)
+
+3. **`TickProfiler` is already in the codebase** (new file from session 4, currently
+   ungated — Task 7 from the optimization pass was to gate behind `BuildConfig.DEBUG`
+   but was interrupted by the driver crash). Wire up a second instance; don't
+   remove the service-side one until after XR profiling confirms the full picture.
+
+**The `TickProfiler` instrumentation (service-side) is still live and ungated.**
+Session 4's Task 7 ("gate behind BuildConfig.DEBUG") was not completed due to the
+video driver crash. Leave it ungated for now — it's useful for the XR profiling pass.
+Gate both profilers at the end of the XR optimization session.
 
 **Device note:** the SM-I610 connects via wireless adb-TLS and DROPS when the adb
-daemon bounces (e.g. a stray `adb` version mismatch). Reconnect from the headset's
-Wireless debugging screen; target it by `adb -t <transport_id>` (the mDNS serial
-gains a `(N)` suffix on reconnect, which is awkward to quote). applicationId is
-`com.sticktoitive.schoenmon`; launch via `adb -t <id> shell monkey -p
-com.sticktoitive.schoenmon -c android.intent.category.LAUNCHER 1`.
+daemon bounces. Reconnect from the headset's Wireless debugging screen; target by
+`adb -t <transport_id>`. applicationId is `com.sticktoitive.schoenmon`.
 
 The Phase A/B task detail below is historical; this block is the source of truth
 for "where we are."
