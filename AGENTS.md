@@ -255,6 +255,48 @@ re-baseline (`StatsCollector.resetNetworkBaseline()`). The foreground service st
 foreground; only the poll loop pauses. This was the primary battery-drain fix -
 verified on the Fold 3 (notification freezes across a sleep, resumes on wake).
 
+### CustomMesh / MeshEntity lifecycle gotchas (added 2026-06-02)
+
+Empirically verified on Galaxy XR (SM-I610) running Jetpack XR `scenecore`
+`1.0.0-alpha15`. These are NOT documented — they were discovered through crash-iterate
+cycles on the physical headset.
+
+**`UBYTE4_NORM` is the only working vertex color type.** `FLOAT4` crashes at
+`VertexAttributeDescriptor` creation with `IllegalArgumentException: Incompatible
+type FLOAT4 for attribute COLOR`. Always use `VertexAttributeType.UBYTE4_NORM` (4
+bytes per vertex, each 0–255, GPU normalizes to 0.0–1.0).
+
+**`dispose()` does NOT remove child MeshEntity instances from the scene.** Calling
+`childEntity.dispose()` on a MeshEntity parented to a root entity does NOT visually
+remove it from the scene graph — it keeps rendering. Confirmed: accumulating children
+produces visible z-fighting / overlapping geometry. **Working pattern:** swap the old
+child's material to a fully transparent `KhronosPbrMaterial` (AlphaMode.BLEND,
+baseColorFactor = (0,0,0,0)) via `setMaterial()` before disposing. Delayed disposal
+(dispose on the NEXT tick, not the current one) prevents race conditions.
+
+**`setParent()` is `@RestrictTo(LIBRARY)` — inaccessible from app code.** Even
+though `Entity.setParent(Entity?)` is public in the interface, it's restricted at the
+Kotlin compiler level. Casting to `Entity` doesn't help. Do not attempt to detach
+children via `setParent(null)`.
+
+**SceneCoreEntity volume bounds come from the root entity's mesh.** A degenerate
+zero-area mesh at origin (all verts at (0,0,0)) causes the SceneCoreEntity to compute
+zero-extent volume, which clips or collapses all child geometry. **Fix:** use a
+"bounds mesh" — two zero-area triangles placed at opposite corners of the maximum
+intended volume. The triangles render nothing (zero area) but define the bounding box
+correctly. See `buildBoundsMesh()` in `RidgelineSurface.kt`.
+
+**PBR material wash-out.** `KhronosPbrMaterial` with default settings (metallicFactor=1,
+roughnessFactor=0) washes out vertex colors to near-white. For visible vertex colors:
+`setBaseColorFactor(1.5, 1.5, 1.5, 1)`, `setMetallicFactor(0)`, `setRoughnessFactor(1)`,
+`setEmissiveFactor(0.03, 0.03, 0.03)`. This lets vertex colors show through the PBR
+diffuse without saturating.
+
+**Sampling rate is 500ms for XR.** The service delay was reduced from 2000ms to 500ms
+to support fluid terrain extrusion in the XR visualization. The 60-sample history
+buffer now covers 30 seconds instead of 2 minutes. This also affects the flat phone
+UI — the charts update 4× faster.
+
 ### Data Repository Lifecycle
-- **Scope**: The rolling performance history buffer (capped at 60 entries / 2 minutes) lives purely in memory as a Singleton state in `PerformanceMonitorRepository`.
+- **Scope**: The rolling performance history buffer (capped at 60 entries / 30 seconds at 500ms sampling) lives purely in memory as a Singleton state in `PerformanceMonitorRepository`.
 - **Behavior**: Stopping and starting the service preserves history *as long as the application process stays alive*. Killing the host application process will clear all charts. (In the future, room-based persistence could be introduced to support durable charts).
