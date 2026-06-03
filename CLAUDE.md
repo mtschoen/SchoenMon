@@ -1,3 +1,3 @@
-# PerfStream
+# SchoenMon
 
 @AGENTS.md

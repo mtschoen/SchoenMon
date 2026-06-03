@@ -1,4 +1,4 @@
-# PerfStream — Agentic Coding System Spec
+# SchoenMon — Agentic Coding System Spec
 
 This repository is optimized for pair-programming with AI coding assistants (like Antigravity, Claude, and Gemini). This file serves as the core specifications, architecture map, visual conventions, and platform-specific gotchas to enable rapid, safe, and context-informed agentic coding.
 
@@ -6,10 +6,10 @@ This repository is optimized for pair-programming with AI coding assistants (lik
 
 ## 1. Repository Layout
 
-All active source code lives within the `app` Android module under `app/src/main/java/com/example/perfstream/`:
+All active source code lives within the `app` Android module under `app/src/main/java/com/sticktoitive/schoenmon/`:
 
 ```
-com/example/perfstream/
+com/sticktoitive/schoenmon/
 ├── MainActivity.kt                  # App entry point, edge-to-edge support, themes & navigation host
 ├── Navigation.kt                    # Navigation3 NavDisplay configuration (single 'Main' route wrapper)
 ├── NavigationKeys.kt                # Type-safe @Serializable data keys (e.g., 'object Main : NavKey')
@@ -25,7 +25,7 @@ com/example/perfstream/
 │
 ├── theme/
 │   ├── Color.kt                     # Unified Obsidian and neon cyber color variables
-│   ├── Theme.kt                     # PerfStreamTheme (forced dark theme, disabled wallpaper-dynamic tinting)
+│   ├── Theme.kt                     # SchoenMonTheme (forced dark theme, disabled wallpaper-dynamic tinting)
 │   └── Type.kt                      # Jetpack Compose typography definitions
 │
 └── ui/
@@ -41,7 +41,7 @@ com/example/perfstream/
 
 ## 2. Architecture & Data Flow
 
-PerfStream operates on a periodic, reactive unidirectional data flow. The main telemetry loop runs inside a dedicated Android `ForegroundService` and distributes stats to the Jetpack Compose dashboard:
+SchoenMon operates on a periodic, reactive unidirectional data flow. The main telemetry loop runs inside a dedicated Android `ForegroundService` and distributes stats to the Jetpack Compose dashboard:
 
 ```text
        +-----------------------+
@@ -74,7 +74,7 @@ PerfStream operates on a periodic, reactive unidirectional data flow. The main t
 
 ## 3. Visual & Design Aesthetics
 
-PerfStream is built as a premium, ad-free cyberpunk hardware monitor. Visual guidelines:
+SchoenMon is built as a premium, ad-free cyberpunk hardware monitor. Visual guidelines:
 - **Palette**: True obsidian dark background (`0xFF08080C`), dark slate cards (`0xFF12121A`), and high-contrast neon accents.
 - **Accents**: 
   - **Cyber Cyan** (`0xFF00E5FF`) for CPU Metrics.
@@ -102,14 +102,14 @@ Gradle and Android CLI options:
 ### Deploy to Emulator or USB-Connected Device
 ```powershell
 # Installs and launches on the active target using the Android CLI tool
-C:\Users\mtsch\AppData\AndroidCLI\android.exe run --activity=com.example.perfstream.MainActivity
+C:\Users\mtsch\AppData\AndroidCLI\android.exe run --activity=com.sticktoitive.schoenmon.MainActivity
 ```
 
 ### Local Testing on Emulator
 For rapid local testing using the pre-configured `Medium_Phone_API_36.1` emulator:
 1. **VS Code Run & Debug (Play Button)**: In the Run & Debug panel on the left (or press `F5`), select and run **"Launch on Emulator"**. This will execute the pre-launch task to boot the emulator, wait for it to be ready, and then deploy and start the application dynamically in the terminal.
-2. **VS Code Tasks**: Run the task `Start Emulator and Run App` (`Ctrl+Shift+B` or through the Tasks panel). This boots the emulator, waits for it to become ready, and then deploys/runs PerfStream.
-3. **Standalone Script**: Double-click or run [run-on-emulator.bat](file:///c:/Users/mtsch/AndroidPerfMonitor/run-on-emulator.bat) from any terminal:
+2. **VS Code Tasks**: Run the task `Start Emulator and Run App` (`Ctrl+Shift+B` or through the Tasks panel). This boots the emulator, waits for it to become ready, and then deploys/runs SchoenMon.
+3. **Standalone Script**: Double-click or run [run-on-emulator.bat](file:///c:/Users/mtsch/SchoenMon/run-on-emulator.bat) from any terminal:
    ```cmd
    .\run-on-emulator.bat
    ```
@@ -180,7 +180,7 @@ icon instead. (Samsung additionally hard-caps the status bar to 3 icons total in
 ### Glanceable surfaces beyond the status bar icon (added 2026-05-31)
 
 The notification status-bar icon is no longer the only way to expose live stats. Three additional
-surfaces now exist under `com.example.perfstream.surface.*`, all fed by one fan-out call,
+surfaces now exist under `com.sticktoitive.schoenmon.surface.*`, all fed by one fan-out call,
 `PerfSurfaces.refreshAll(context, stats)`, invoked from the service sampling loop each 2s tick.
 All read from the shared `PerformanceMonitorRepository` singleton.
 
@@ -218,17 +218,17 @@ and for LockStar) and do NOT build a dedicated lock-screen surface.
 
 ### Android XR (Galaxy XR) spatial build (added 2026-06-02)
 
-PerfStream ships a spatial build from the SAME module/APK (code under `ui/xr/`),
+SchoenMon ships a spatial build from the SAME module/APK (code under `ui/xr/`),
 gated so phones/Folds are byte-for-byte unchanged. Phase A is complete and verified
 on a physical Galaxy XR (SM-I610, SDK 34 / Android 14-based, connected via adb-TLS).
-Active work + resume point: `docs/superpowers/plans/2026-06-02-perfstream-xr.md`
+Active work + resume point: `docs/superpowers/plans/2026-06-02-schoenmon-xr.md`
 (read its top "RESUME HERE" block first).
 
 Verified API facts (Jetpack XR Developer Preview; `androidx.xr.compose`+`runtime`
 `1.0.0-alpha14`, `scenecore` `1.0.0-alpha15`):
 - **Gate:** `LocalSpatialCapabilities.current.isSpatialUiEnabled` - package
   `androidx.xr.compose.platform` (NOT `.spatial`). True only in Full Space.
-  `PerfStreamRoot` branches: spatial -> `SpatialDashboard`, else flat `MainNavigation`.
+  `SchoenMonRoot` branches: spatial -> `SpatialDashboard`, else flat `MainNavigation`.
 - **Grabbable panel:** `SpatialPanel(SubspaceModifier...transformingMovable().resizable())`
   in a `Subspace`. `movable()` is NOT the grab modifier; `transformingMovable()` is.
 - **Enter full space:** `LocalSpatialConfiguration.current.requestFullSpaceMode()`,

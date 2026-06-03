@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.perfstream"
+    namespace = "com.sticktoitive.schoenmon"
     compileSdk = 36
     defaultConfig {
         applicationId = "com.sticktoitive.schoenmon"
@@ -85,7 +85,7 @@ dependencies {
 
   // Jetpack XR (Developer Preview) - spatial build for Galaxy XR. Additive and
   // phone-safe; gated at runtime by LocalSpatialCapabilities. See
-  // docs/superpowers/plans/2026-06-02-perfstream-xr.md.
+  // docs/superpowers/plans/2026-06-02-schoenmon-xr.md.
   implementation(libs.androidx.xr.compose)
   implementation(libs.androidx.xr.scenecore)
   implementation(libs.androidx.xr.runtime)

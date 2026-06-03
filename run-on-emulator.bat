@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ==========================================================
-echo               PerfStream Emulator Launcher
+echo               SchoenMon Emulator Launcher
 echo ==========================================================
 echo.
 
@@ -31,9 +31,9 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo.
-echo [3/3] Deploying and launching PerfStream on the emulator...
+echo [3/3] Deploying and launching SchoenMon on the emulator...
 echo.
-"!CLI_PATH!" run --activity=com.example.perfstream.MainActivity --apks=app/build/outputs/apk/debug/app-debug.apk
+"!CLI_PATH!" run --activity=com.sticktoitive.schoenmon.MainActivity --apks=app/build/outputs/apk/debug/app-debug.apk
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Failed to deploy or launch the application.
     goto error
@@ -41,7 +41,7 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo ==========================================================
-echo [SUCCESS] PerfStream is running on the emulator!
+echo [SUCCESS] SchoenMon is running on the emulator!
 echo ==========================================================
 goto end
 

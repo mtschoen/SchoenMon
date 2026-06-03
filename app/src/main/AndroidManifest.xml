@@ -19,7 +19,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:windowSoftInputMode="adjustResize"
-        android:theme="@style/Theme.PerfStream">
+        android:theme="@style/Theme.SchoenMon">
 
         <!-- Jetpack XR start mode. HOME_SPACE_MANAGED launches the app as a normal
              2D panel: correct on phones, and on XR it appears as a floating panel

@@ -22,7 +22,7 @@
       "runtimeExecutable": "C:\\Users\\mtsch\\AppData\\AndroidCLI\\android.exe",
       "runtimeArgs": [
         "run",
-        "--activity=com.example.perfstream.MainActivity",
+        "--activity=com.sticktoitive.schoenmon.MainActivity",
         "--apks=app/build/outputs/apk/debug/app-debug.apk",
         "--device=RFCRB0G5DLW"
       ],

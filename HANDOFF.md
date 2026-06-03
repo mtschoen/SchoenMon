@@ -1,7 +1,7 @@
-# PerfStream — Session Handoff Spec
+# SchoenMon — Session Handoff Spec
 
-> **Project**: PerfStream — a unified, ad-free Android performance monitor  
-> **Location**: `C:\Users\mtsch\AndroidPerfMonitor`  
+> **Project**: SchoenMon — a unified, ad-free Android performance monitor  
+> **Location**: `C:\Users\mtsch\SchoenMon`  
 > **Last Build**: `BUILD SUCCESSFUL` — `app-debug.apk` (11.4 MB) at `app/build/outputs/apk/debug/`  
 > **Created**: 2026-05-31  
 
@@ -29,7 +29,7 @@ The user wants this to be a simple, clean starting point they can evolve over ti
 | Build System | Gradle 9.1 (Kotlin DSL), AGP via version catalog |
 | Navigation | AndroidX Navigation3 |
 | Charts | Custom `Canvas`-drawn (no third-party library) |
-| Package ID | `com.example.perfstream` |
+| Package ID | `com.sticktoitive.schoenmon` |
 
 **Android CLI tool** is installed at `C:\Users\mtsch\AppData\AndroidCLI\android.exe` and can be used for `android run`, `android docs search`, emulator management, etc.
 
@@ -37,10 +37,10 @@ The user wants this to be a simple, clean starting point they can evolve over ti
 
 ## 3. File Map
 
-All source lives under `app/src/main/java/com/example/perfstream/`:
+All source lives under `app/src/main/java/com/sticktoitive/schoenmon/`:
 
 ```
-com/example/perfstream/
+com/sticktoitive/schoenmon/
 ├── MainActivity.kt              # Entry point, enableEdgeToEdge, hosts theme + nav
 ├── Navigation.kt                # Navigation3 NavDisplay setup (single Main route)
 ├── NavigationKeys.kt            # @Serializable data object Main : NavKey
@@ -57,7 +57,7 @@ com/example/perfstream/
 │
 ├── theme/
 │   ├── Color.kt                 # Default Material color tokens
-│   ├── Theme.kt                 # PerfStreamTheme with dynamic color support
+│   ├── Theme.kt                 # SchoenMonTheme with dynamic color support
 │   └── Type.kt                  # Typography definitions
 │
 └── ui/
@@ -107,11 +107,11 @@ Declares:
 
 ```powershell
 # Build
-cd C:\Users\mtsch\AndroidPerfMonitor
+cd C:\Users\mtsch\SchoenMon
 .\gradlew.bat assembleDebug
 
 # Deploy to connected device (USB debugging must be enabled)
-C:\Users\mtsch\AppData\AndroidCLI\android.exe run --activity=com.example.perfstream.MainActivity
+C:\Users\mtsch\AppData\AndroidCLI\android.exe run --activity=com.sticktoitive.schoenmon.MainActivity
 ```
 
 The Gradle wrapper is already bootstrapped (Gradle 9.1.0). First build downloads dependencies; subsequent builds use the configuration cache.
@@ -132,7 +132,7 @@ These should be addressed in follow-up work:
 
 5. **No `git init`** — the project doesn't have a git repository yet.
 
-6. **Package ID is `com.example.perfstream`** — should be changed to something real if publishing (e.g., `com.mtsch.perfstream`). Requires updating `namespace` and `applicationId` in `app/build.gradle.kts` and the package declarations in every `.kt` file.
+6. **Package ID is `com.sticktoitive.schoenmon`** — should be changed to something real if publishing (e.g., `com.mtsch.schoenmon`). Requires updating `namespace` and `applicationId` in `app/build.gradle.kts` and the package declarations in every `.kt` file.
 
 7. **History buffer resets on service restart** — `PerformanceMonitorRepository` is a Kotlin `object` (process singleton). If the service is stopped and restarted, history survives within the same process, but killing the app clears it. Persisting history to Room or a file would enable longer-term charts.
 
@@ -159,4 +159,4 @@ These should be addressed in follow-up work:
 - [ ] Add per-app network usage breakdown via `NetworkStatsManager`
 - [ ] Add GPU frequency monitoring (device-specific, Qualcomm/Mali paths differ)
 - [ ] Widget for home screen showing live mini-charts
-- [ ] Change package ID from `com.example.perfstream` to a real one and prepare for release signing
+- [ ] Change package ID from `com.sticktoitive.schoenmon` to a real one and prepare for release signing
