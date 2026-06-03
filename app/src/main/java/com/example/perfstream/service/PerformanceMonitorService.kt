@@ -108,7 +108,7 @@ class PerformanceMonitorService : Service() {
                 // Fan the same sample out to every other glanceable surface.
                 PerfSurfaces.refreshAll(applicationContext, stats)
 
-                delay(2000)
+                delay(500)
             }
         }
     }
