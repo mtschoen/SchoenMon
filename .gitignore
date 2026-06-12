@@ -11,6 +11,7 @@
 /build
 /captures
 .aislop/
+.superpowers/
 .externalNativeBuild
 .cxx
 local.properties
