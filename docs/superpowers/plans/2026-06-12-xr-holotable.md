@@ -31,7 +31,7 @@ The working tree holds the in-flight Path D spike (already verified rendering on
 **Files:**
 - Modify: none (commit only)
 
-- [ ] **Step 1: Commit all current WIP**
+- [x] **Step 1: Commit all current WIP** (done at session wrap, commit `5f3cd16`)
 
 ```bash
 git add AGENTS.md app/build.gradle.kts \

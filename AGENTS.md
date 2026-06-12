@@ -221,8 +221,10 @@ and for LockStar) and do NOT build a dedicated lock-screen surface.
 SchoenMon ships a spatial build from the SAME module/APK (code under `ui/xr/`),
 gated so phones/Folds are byte-for-byte unchanged. Phase A is complete and verified
 on a physical Galaxy XR (SM-I610, SDK 34 / Android 14-based, connected via adb-TLS).
-Active work + resume point: `docs/superpowers/plans/2026-06-02-schoenmon-xr.md`
-(read its top "RESUME HERE" block first).
+Active work + resume point: `docs/superpowers/plans/2026-06-12-xr-holotable.md`
+(holotable redesign; Task 1 baseline already committed. The older
+`2026-06-02-schoenmon-xr.md` plan's platform findings remain valid but its
+visual direction is superseded - its retirement is that new plan's Task 10).
 
 Verified API facts (Jetpack XR Developer Preview; `androidx.xr.compose`+`runtime`
 `1.0.0-alpha14`, `scenecore` `1.0.0-alpha15`):
