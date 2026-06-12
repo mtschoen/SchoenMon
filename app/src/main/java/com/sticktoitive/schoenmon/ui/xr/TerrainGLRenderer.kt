@@ -39,45 +39,61 @@ class TerrainGLRenderer(
         const val COLS = 60
         const val ROWS = 16
         // Vertex shader: flat UV-space pass (no camera; geometry comes from
-        // the SurfaceEntity TriangleMesh, this texture only supplies colour)
+        // the SurfaceEntity TriangleMesh, this texture only supplies colour).
+        //
+        // NDC y is NEGATED on purpose: GL window coordinates are bottom-up,
+        // but the SurfaceEntity sampler addresses the queued buffer in Android
+        // image convention (texCoord v=0 = top scanline) without applying the
+        // GL producer's vertical-flip transform. Rendering the grid top-down
+        // makes mesh texCoord v line up with heightmap row, so colour tracks
+        // geometry. (Root-caused 2026-06-12: colours were lane-mirrored across
+        // the z axis relative to the ridges.)
         private val VERT_SRC = """
             #version 300 es
             precision highp float;
             layout(location = 0) in vec2 aGridPos;   // (u, v) in [0,1]
-            uniform sampler2D uHeightmap;
             out vec2 vUV;
-            out float vHeight;
             void main() {
                 vUV = aGridPos;
-                vHeight = texture(uHeightmap, aGridPos).r;
-                gl_Position = vec4(aGridPos.x * 2.0 - 1.0, aGridPos.y * 2.0 - 1.0, 0.0, 1.0);
+                gl_Position = vec4(aGridPos.x * 2.0 - 1.0, 1.0 - aGridPos.y * 2.0, 0.0, 1.0);
             }
         """.trimIndent()
 
-        // Fragment shader: neon lane colouring + height glow
+        // Fragment shader: continuous height heat-map + hologram translucency.
+        // Height is sampled per-fragment from the heightmap so the gradient is
+        // smooth across the coarse 60x16 vertex grid.
         private val FRAG_SRC = """
             #version 300 es
             precision mediump float;
             in vec2 vUV;
-            in float vHeight;
             out vec4 fragColor;
+            uniform sampler2D uHeightmap;
+
+            vec3 heat(float h) {
+                vec3 navy  = vec3(0.063, 0.110, 0.306);
+                vec3 blue  = vec3(0.161, 0.384, 1.000);
+                vec3 cyan  = vec3(0.000, 0.898, 1.000);
+                vec3 green = vec3(0.000, 0.902, 0.463);
+                vec3 amber = vec3(1.000, 0.671, 0.000);
+                vec3 red   = vec3(1.000, 0.090, 0.267);
+                if (h < 0.35) return mix(navy,  blue,  h / 0.35);
+                if (h < 0.60) return mix(blue,  cyan,  (h - 0.35) / 0.25);
+                if (h < 0.75) return mix(cyan,  green, (h - 0.60) / 0.15);
+                if (h < 0.88) return mix(green, amber, (h - 0.75) / 0.13);
+                return mix(amber, red, (h - 0.88) / 0.12);
+            }
+
             void main() {
-                float v = vUV.y;
-                // SchoenMon neon palette gradient
-                vec3 cyan  = vec3(0.0, 0.898, 1.0);
-                vec3 pink  = vec3(0.835, 0.0, 0.976);
-                vec3 green = vec3(0.0, 0.902, 0.463);
-                vec3 amber = vec3(1.0, 0.671, 0.0);
-                vec3 color;
-                if (v < 0.333) {
-                    color = mix(cyan, pink, v / 0.333);
-                } else if (v < 0.666) {
-                    color = mix(pink, green, (v - 0.333) / 0.333);
-                } else {
-                    color = mix(green, amber, (v - 0.666) / 0.334);
-                }
-                float glow = 0.15 + vHeight * 0.85;
-                fragColor = vec4(color * glow, 0.5);
+                // Texel-center remap: the grid spans [0,1] across COLS-1 x ROWS-1
+                // quads (vertex lattice), but texel centers sit at (i+0.5)/N.
+                // Without this, lane colours shear by up to half a lane at the
+                // near/far edges (sampled texel error = row/(ROWS-1) - 0.5).
+                vec2 uv = vUV * vec2(${COLS - 1}.0 / $COLS.0, ${ROWS - 1}.0 / $ROWS.0)
+                        + vec2(0.5 / $COLS.0, 0.5 / $ROWS.0);
+                float h = texture(uHeightmap, uv).r;
+                // Hologram translucency: idle floor stays ghostly, peaks more present.
+                float alpha = 0.40 + 0.35 * h;
+                fragColor = vec4(heat(h), alpha);
             }
         """.trimIndent()
     }
@@ -100,6 +116,9 @@ class TerrainGLRenderer(
 
     // Heightmap data staging buffer (written from any thread, read on GL thread)
     @Volatile private var pendingHeightmap: FloatArray? = null
+
+    // Monotonic count of heightmap texture uploads (logged once per render).
+    private var uploadGeneration = 0L
 
     /** Initialise EGL + GL resources. Call once after construction. */
     fun initialize() {
@@ -234,6 +253,7 @@ class TerrainGLRenderer(
         val hm = pendingHeightmap
         if (hm != null) {
             pendingHeightmap = null
+            uploadGeneration++
             val buf = ByteBuffer.allocateDirect(hm.size * 4).order(ByteOrder.nativeOrder())
             buf.asFloatBuffer().put(hm)
             buf.rewind()
@@ -261,7 +281,13 @@ class TerrainGLRenderer(
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ibo)
         GLES30.glDrawElements(GLES30.GL_TRIANGLES, indexCount, GLES30.GL_UNSIGNED_SHORT, 0)
 
-        EGL14.eglSwapBuffers(eglDisplay, eglSurface)
+        val swapOk = EGL14.eglSwapBuffers(eglDisplay, eglSurface)
+        if (!swapOk) {
+            Log.w(TAG, "eglSwapBuffers failed: 0x${Integer.toHexString(EGL14.eglGetError())}")
+        }
+        // One line per tick, mirroring the TickProfiler cadence: proves the
+        // texture path is live (uploadGeneration advances) and frames land.
+        Log.d(TAG, "render gen=$uploadGeneration swap=$swapOk")
     }
 
     private fun destroyGL() {

@@ -165,8 +165,25 @@ fun TerrainSurface() {
                 .invoke(entity, newShape)
             profiler?.markPhase("setShape")
 
-            // Update GL texture for lane colouring.
-            val heightmap = lanesToHeightmap(lanes)
+            // ---- TEMP ORIENTATION PROBE (remove after on-device check) ----
+            // Synthetic heightmap instead of live data; geometry stays live.
+            // Row 0 (nearest lane, +z)  -> 1.0  = solid RED stripe.
+            // Row 15 (farthest lane)    -> 0.70 = solid GREEN stripe.
+            // Rows 1..14: time ramp 0 (oldest, left/-x) -> 0.55 (newest,
+            // right/+x) = navy fading up to cyan.
+            val heightmap = FloatArray(TerrainGLRenderer.COLS * TerrainGLRenderer.ROWS)
+            for (row in 0 until TerrainGLRenderer.ROWS) {
+                for (col in 0 until TerrainGLRenderer.COLS) {
+                    heightmap[row * TerrainGLRenderer.COLS + col] = when (row) {
+                        0 -> 1.0f
+                        TerrainGLRenderer.ROWS - 1 -> 0.70f
+                        else -> 0.55f * col / (TerrainGLRenderer.COLS - 1f)
+                    }
+                }
+            }
+            // Original line (restore when removing the probe):
+            // val heightmap = lanesToHeightmap(lanes)
+            // ---- END TEMP ORIENTATION PROBE -------------------------------
             renderer?.updateAndRender(heightmap)
             profiler?.markPhase("glRender")
 
