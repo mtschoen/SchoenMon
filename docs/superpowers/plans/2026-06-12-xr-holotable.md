@@ -48,7 +48,7 @@ git commit -m "wip(xr): Path D spike baseline - SurfaceEntity TriangleMesh terra
 **Files:**
 - Modify: `app/src/main/java/com/sticktoitive/schoenmon/ui/xr/TerrainGLRenderer.kt`
 
-- [ ] **Step 1: Write fragment alpha + disable blending so alpha lands in the buffer verbatim**
+- [x] **Step 1: Write fragment alpha + disable blending so alpha lands in the buffer verbatim**
 
 In `FRAG_SRC`, change the output line to a hard half-transparent output:
 
@@ -68,21 +68,21 @@ In `doRender()`, change the clear to fully transparent so empty texels are a sec
 GLES30.glClearColor(0f, 0f, 0f, 0f)
 ```
 
-- [ ] **Step 2: Deploy and observe on-device**
+- [x] **Step 2: Deploy and observe on-device**
 
 Run the build/deploy loop. User enters Full Space and answers ONE question while looking at the terrain: **can you see the room (passthrough) through the colored surface?**
 - Surface visibly see-through (room texture/edges behind it) = ALPHA WORKS.
 - Surface solid (colors dimmed or not, but opaque) = ALPHA IGNORED.
 
-- [ ] **Step 3: Record the verdict in this plan and in AGENTS.md**
+- [x] **Step 3: Record the verdict in this plan and in AGENTS.md**
 
 Tick exactly one:
-- [ ] **ALPHA WORKS** - proceed to Phase 1.
+- [x] **ALPHA WORKS** - proceed to Phase 1. (User-confirmed on-device 2026-06-12: passthrough room visible through the colored surface.)
 - [ ] **ALPHA IGNORED** - STOP. Re-invoke superpowers:writing-plans to rewrite Phases 1-3 against the Approach 2 description in this plan's Architecture header (translucent CustomMesh). Phase 0 and all requirements/references above stay valid.
 
 Either way, append the finding to AGENTS.md section 5 (it is a new platform fact, in the style of the existing entries: what was tested, on what device/build, what happened).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add app/src/main/java/com/sticktoitive/schoenmon/ui/xr/TerrainGLRenderer.kt AGENTS.md docs/superpowers/plans/2026-06-12-xr-holotable.md

@@ -77,7 +77,7 @@ class TerrainGLRenderer(
                     color = mix(green, amber, (v - 0.666) / 0.334);
                 }
                 float glow = 0.15 + vHeight * 0.85;
-                fragColor = vec4(color * glow, 1.0);
+                fragColor = vec4(color * glow, 0.5);
             }
         """.trimIndent()
     }
@@ -221,8 +221,7 @@ class TerrainGLRenderer(
         // --- GL state ---
         GLES30.glViewport(0, 0, surfaceWidth, surfaceHeight)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
-        GLES30.glEnable(GLES30.GL_BLEND)
-        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glDisable(GLES30.GL_BLEND)
 
         initialized = true
         Log.i(TAG, "GL init OK: ${surfaceWidth}×${surfaceHeight}, program=$program")
@@ -246,7 +245,7 @@ class TerrainGLRenderer(
         }
 
         // Clear (not normally visible: the grid spans the full viewport)
-        GLES30.glClearColor(0.03f, 0.03f, 0.05f, 1f)
+        GLES30.glClearColor(0f, 0f, 0f, 0f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
 
         // Draw terrain

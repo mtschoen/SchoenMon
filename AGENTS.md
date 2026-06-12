@@ -308,6 +308,16 @@ to support fluid terrain extrusion in the XR visualization. The 60-sample histor
 buffer now covers 30 seconds instead of 2 minutes. This also affects the flat phone
 UI — the charts update 4× faster.
 
+### SurfaceEntity per-pixel alpha IS honored by the XR compositor (M0 verdict, 2026-06-12)
+
+Spike-verified on the physical Galaxy XR (SM-I610, `scenecore` 1.0.0-alpha15): a
+`SurfaceEntity` whose GL surface writes fragment alpha verbatim (0.5 on the terrain
+body, 0.0 clear; `GL_BLEND` disabled, `EGL_ALPHA_SIZE 8` config, no `glColorMask`)
+renders visibly see-through in Full Space - the passthrough room reads through the
+colored surface. User-confirmed on-device. Per-pixel translucency for the holotable
+hologram therefore comes straight from the surface texture; the CustomMesh
+per-vertex-alpha fallback path is NOT needed.
+
 ### Data Repository Lifecycle
 - **Scope**: The rolling performance history buffer (capped at 60 entries / 30 seconds at 500ms sampling) lives purely in memory as a Singleton state in `PerformanceMonitorRepository`.
 - **Behavior**: Stopping and starting the service preserves history *as long as the application process stays alive*. Killing the host application process will clear all charts. (In the future, room-based persistence could be introduced to support durable charts).
