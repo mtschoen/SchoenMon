@@ -255,6 +255,15 @@ re-baseline (`StatsCollector.resetNetworkBaseline()`). The foreground service st
 foreground; only the poll loop pauses. This was the primary battery-drain fix -
 verified on the Fold 3 (notification freezes across a sleep, resumes on wake).
 
+> **XR EXCEPTION (added 2026-06-03):** Android XR headsets (SM-I610, SDK 34)
+> report `PowerManager.isInteractive` = `false` even while the user is actively
+> wearing the device (`dumpsys power` shows `mWakefulness=Asleep`). The
+> `ACTION_SCREEN_ON` broadcast never fires. This silently prevented the sampling
+> loop from starting on the headset. **Fix:** `isScreenOn()` now checks
+> `packageManager.hasSystemFeature("android.software.xr.api.spatial")` and
+> returns `true` unconditionally on XR devices. The OS kills the foreground
+> service when the headset truly sleeps, so no battery drain risk.
+
 ### CustomMesh / MeshEntity lifecycle gotchas (added 2026-06-02)
 
 Empirically verified on Galaxy XR (SM-I610) running Jetpack XR `scenecore`

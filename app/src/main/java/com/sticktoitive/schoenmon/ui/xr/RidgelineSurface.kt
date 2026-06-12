@@ -179,7 +179,7 @@ fun RidgelineSurface() {
  * so child MeshEntities aren’t volume-clipped.
  */
 @OptIn(ExperimentalCustomMeshApi::class)
-private fun buildBoundsMesh(session: Session): CustomMesh {
+internal fun buildBoundsMesh(session: Session): CustomMesh {
     // Max extent: 60 samples * 0.015m/sample = 0.885m wide, 0.25m tall, 3*0.15 = 0.45m deep
     val hw = MAX_SAMPLES * SAMPLE_STEP / 2f   // half-width
     val hh = AMPLITUDE / 2f                    // half-height

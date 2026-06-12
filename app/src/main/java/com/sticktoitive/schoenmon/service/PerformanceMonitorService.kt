@@ -13,6 +13,7 @@ import android.graphics.Color
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import com.sticktoitive.schoenmon.BuildConfig
 import com.sticktoitive.schoenmon.MainActivity
 import com.sticktoitive.schoenmon.R
 import com.sticktoitive.schoenmon.core.PerformanceStats
@@ -37,7 +38,7 @@ class PerformanceMonitorService : Service() {
     private var isRunning = false
     private var samplingJob: Job? = null
     private var serviceStartTime: Long = 0L
-    private val profiler = TickProfiler()
+    private val profiler: TickProfiler? = if (BuildConfig.DEBUG) TickProfiler() else null
 
     // Pauses the sampling loop while the display is off: every glanceable
     // surface (status-bar icon, Now Bar chip, widget, tiles) is invisible with
@@ -105,16 +106,16 @@ class PerformanceMonitorService : Service() {
             var tickCount = 0L
 
             while (isRunning) {
-                profiler.beginTick()
+                profiler?.beginTick()
 
                 val stats = statsCollector.sample()
-                profiler.markPhase("sample")
+                profiler?.markPhase("sample")
 
                 PerformanceMonitorRepository.updateStats(stats)
-                profiler.markPhase("repoUpdate")
+                profiler?.markPhase("repoUpdate")
 
                 val notification = buildNotification(stats)
-                profiler.markPhase("notifBuild")
+                profiler?.markPhase("notifBuild")
 
                 // Fire-and-forget: notification IPC and surface refreshes run
                 // on the IO dispatcher and must NOT block the next sample.
@@ -133,9 +134,9 @@ class PerformanceMonitorService : Service() {
                         skipLiveUpdate = tick % 2 != 0L,
                     )
                 }
-                profiler.markPhase("dispatch")
+                profiler?.markPhase("dispatch")
 
-                profiler.endTick()
+                profiler?.endTick()
 
                 delay(500)
             }
@@ -145,6 +146,12 @@ class PerformanceMonitorService : Service() {
     // ──────────────────────────────────────────────
     //  Screen-state gating (battery)
     // ──────────────────────────────────────────────
+    //
+    //  XR EXCEPTION: Android XR headsets report PowerManager.isInteractive
+    //  as false even while the user is actively wearing them (mWakefulness=
+    //  Asleep). The screen on/off broadcast model doesn't apply to HMDs.
+    //  On XR devices we always run the loop; the foreground service itself
+    //  is the battery gate (the OS kills it when the headset truly sleeps).
 
     private fun registerScreenReceiver() {
         val filter = IntentFilter().apply {
@@ -161,7 +168,13 @@ class PerformanceMonitorService : Service() {
         }
     }
 
+    /** On XR headsets the "screen" is always conceptually on. */
+    private val isXrDevice: Boolean by lazy {
+        packageManager.hasSystemFeature("android.software.xr.api.spatial")
+    }
+
     private fun isScreenOn(): Boolean {
+        if (isXrDevice) return true
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         return powerManager.isInteractive
     }

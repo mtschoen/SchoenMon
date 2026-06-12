@@ -44,6 +44,9 @@ fun SpatialDashboard() {
         }
         // The ridgeline mesh, wrapped in its own grabbable/resizable volume beside
         // the panel. A subspace composable, so it lives inside the Subspace DSL.
-        RidgelineSurface()
+        // OLD: procedural CustomMesh + MeshEntity (48ms/tick — for comparison)
+        // RidgelineSurface()
+        // NEW: SurfaceEntity + TriangleMesh spike (target <11ms/tick)
+        TerrainSurface()
     }
 }
