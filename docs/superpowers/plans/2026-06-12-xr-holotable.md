@@ -22,83 +22,17 @@
 
 ---
 
-## Phase 0: M0 - alpha spike gate
-
-### Task 1: Commit the spike baseline
-
-The working tree holds the in-flight Path D spike (already verified rendering on-device this session). Freeze it so every later step diffs cleanly.
-
-**Files:**
-- Modify: none (commit only)
-
-- [x] **Step 1: Commit all current WIP** (done at session wrap, commit `5f3cd16`)
-
-```bash
-git add AGENTS.md app/build.gradle.kts \
-  app/src/main/java/com/sticktoitive/schoenmon/service/PerformanceMonitorService.kt \
-  app/src/main/java/com/sticktoitive/schoenmon/ui/xr/SpatialDashboard.kt \
-  app/src/main/java/com/sticktoitive/schoenmon/ui/xr/TerrainSurface.kt \
-  app/src/main/java/com/sticktoitive/schoenmon/ui/xr/TerrainGLRenderer.kt \
-  app/src/main/java/com/sticktoitive/schoenmon/ui/xr/RidgelineSurface.kt
-git commit -m "wip(xr): Path D spike baseline - SurfaceEntity TriangleMesh terrain renders on SM-I610 (CCW winding fix, flat UV color pass, 1.7ms/tick)"
-```
-
-### Task 2: Alpha spike - does the compositor honor surface alpha?
-
-**Files:**
-- Modify: `app/src/main/java/com/sticktoitive/schoenmon/ui/xr/TerrainGLRenderer.kt`
-
-- [x] **Step 1: Write fragment alpha + disable blending so alpha lands in the buffer verbatim**
-
-In `FRAG_SRC`, change the output line to a hard half-transparent output:
-
-```glsl
-fragColor = vec4(color * glow, 0.5);
-```
-
-In `initGL()`, replace the blend enable with a disable (we WRITE alpha, we do not blend against the cleared buffer):
-
-```kotlin
-GLES30.glDisable(GLES30.GL_BLEND)
-```
-
-In `doRender()`, change the clear to fully transparent so empty texels are a second data point:
-
-```kotlin
-GLES30.glClearColor(0f, 0f, 0f, 0f)
-```
-
-- [x] **Step 2: Deploy and observe on-device**
-
-Run the build/deploy loop. User enters Full Space and answers ONE question while looking at the terrain: **can you see the room (passthrough) through the colored surface?**
-- Surface visibly see-through (room texture/edges behind it) = ALPHA WORKS.
-- Surface solid (colors dimmed or not, but opaque) = ALPHA IGNORED.
-
-- [x] **Step 3: Record the verdict in this plan and in AGENTS.md**
-
-Tick exactly one:
-- [x] **ALPHA WORKS** - proceed to Phase 1. (User-confirmed on-device 2026-06-12: passthrough room visible through the colored surface.)
-- [ ] **ALPHA IGNORED** - STOP. Re-invoke superpowers:writing-plans to rewrite Phases 1-3 against the Approach 2 description in this plan's Architecture header (translucent CustomMesh). Phase 0 and all requirements/references above stay valid.
-
-Either way, append the finding to AGENTS.md section 5 (it is a new platform fact, in the style of the existing entries: what was tested, on what device/build, what happened).
-
-- [x] **Step 4: Commit**
-
-```bash
-git add app/src/main/java/com/sticktoitive/schoenmon/ui/xr/TerrainGLRenderer.kt AGENTS.md docs/superpowers/plans/2026-06-12-xr-holotable.md
-git commit -m "spike(xr): SurfaceEntity per-pixel alpha verdict on SM-I610"
-```
-
----
-
 ## Phase 1: M1 - glassy holotable (assumes ALPHA WORKS)
+
+> Phase 0 (M0 alpha spike gate) completed and swept 2026-06-12: verdict **ALPHA WORKS**
+> (commit `aab598b`; platform fact recorded in AGENTS.md section 5).
 
 ### Task 3: Holotable scale, grab-only interaction, right-sized bounds mesh
 
 **Files:**
 - Modify: `app/src/main/java/com/sticktoitive/schoenmon/ui/xr/TerrainSurface.kt`
 
-- [ ] **Step 1: Coffee-table mesh extents**
+- [x] **Step 1: Coffee-table mesh extents**
 
 In `TerrainMeshState.companion`, set:
 
@@ -110,7 +44,7 @@ const val EXTENT_Z = 0.60f   // metres, core lanes
 const val AMPLITUDE = 0.30f  // metres, load 0..1
 ```
 
-- [ ] **Step 2: Parameterized bounds mesh, local to TerrainSurface**
+- [x] **Step 2: Parameterized bounds mesh, local to TerrainSurface** (note: real alpha15 builder API is `setIndexData(...)` with no `addSubset` - copied from the authoritative `buildBoundsMesh` per this step's instruction)
 
 `buildBoundsMesh` in RidgelineSurface.kt is sized for the OLD extents (0.885 x 0.25 x 0.45m); the new hologram + slab would be volume-clipped. Add this to `TerrainSurface.kt` (same imports RidgelineSurface uses for its mesh builders: `ByteBufferRegion`, `CustomMesh`, `VertexAttribute`, `VertexAttributeDescriptor`, `VertexAttributeType`, `VertexLayout`, `MeshSubsetTopology`, `androidx.xr.runtime.Session`):
 
@@ -166,7 +100,7 @@ private fun buildHolotableBoundsMesh(session: Session): CustomMesh {
 
 In the `rootEntity` remember block, call `buildHolotableBoundsMesh(session)` instead of `buildBoundsMesh(session)`.
 
-- [ ] **Step 3: Grab-only volume at table placement**
+- [x] **Step 3: Grab-only volume at table placement**
 
 Replace the SceneCoreEntity modifier chain (1 metre is approximately 1151.86dp in Jetpack XR; values are starting points to tune on-device):
 
@@ -185,15 +119,38 @@ SceneCoreEntity(
 
 Remove the now-unused `resizable` import. Keep `initialPose` as `Pose(Vector3(0f,0f,0f), Quaternion.Identity)` (layout owns placement).
 
-- [ ] **Step 4: Build, deploy, sanity-check on-device**
+- [x] **Step 4: Build, deploy, sanity-check on-device** (2026-06-12: renders at new scale/placement, not resizable; grab fly-away PERSISTS - filed as Task 3b per this step's instruction)
 
 Run the build/deploy loop. Expected: terrain renders at the new size, below and in front of the panel, grabbable but not resizable, and the grab no longer flies away (if it still does, file it as the next debugging task - do not redesign here).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/src/main/java/com/sticktoitive/schoenmon/ui/xr/TerrainSurface.kt
 git commit -m "feat(xr): holotable scale + grab-only volume + right-sized bounds mesh"
+```
+
+### Task 3b: Debug grab fly-away (filed 2026-06-12 during the Task 3 sanity check)
+
+On-device after Task 3: the holotable renders at the new scale/placement and is no longer
+resizable, but grabbing it still sends it flying away - so `resizable()` is ruled out as
+the sole cause. Scope: interaction/placement debugging ONLY, no visual redesign. Must be
+fixed before the Task 7 soul check can sign off on "stable grab". Sequencing note: Tasks
+4-6 do not touch the modifier chain, so this can run after them if visual progress is
+preferred first.
+
+**Files:**
+- Likely: `app/src/main/java/com/sticktoitive/schoenmon/ui/xr/TerrainSurface.kt` (modifier chain / volume sizing / pose)
+
+- [ ] **Step 1: Investigate with superpowers:systematic-debugging** (candidates: `transformingMovable()` pose feedback against the layout-owned offset; SceneCoreEntity volume vs bounds-mesh extents mismatch; check whether the old RidgelineSurface grab behaved the same)
+
+Evidence from the Task 3 quality review: the dp volume (1500 x 580 x 800dp = ~1.302 x 0.504 x 0.695m at 1m ~= 1151.86dp) and the bounds-mesh AABB (1.50 x 0.50 x 0.80m) disagree by ~0.20m in X and ~0.105m in Z. Harmless for rendering (degenerate verts draw nothing) but a candidate input to whatever drives the grab transform.
+- [ ] **Step 2: Fix, deploy, user confirms stable grab**
+- [ ] **Step 3: Commit**
+
+```bash
+git add app/src/main/java/com/sticktoitive/schoenmon/ui/xr/TerrainSurface.kt
+git commit -m "fix(xr): stable holotable grab"
 ```
 
 ### Task 4: Glassy heat-map shader

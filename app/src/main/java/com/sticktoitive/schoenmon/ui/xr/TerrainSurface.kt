@@ -13,20 +13,27 @@ import androidx.xr.compose.subspace.layout.SubspaceModifier
 import androidx.xr.compose.subspace.layout.depth
 import androidx.xr.compose.subspace.layout.height
 import androidx.xr.compose.subspace.layout.offset
-import androidx.xr.compose.subspace.layout.resizable
 import androidx.xr.compose.subspace.layout.transformingMovable
 import androidx.xr.compose.subspace.layout.width
+import androidx.xr.runtime.Session
 import androidx.xr.runtime.math.FloatSize2d
 import androidx.xr.runtime.math.Pose
 import androidx.xr.runtime.math.Quaternion
 import androidx.xr.runtime.math.Vector3
 import androidx.xr.runtime.math.Vector4
 import androidx.xr.scenecore.AlphaMode
+import androidx.xr.scenecore.ByteBufferRegion
+import androidx.xr.scenecore.CustomMesh
 import androidx.xr.scenecore.ExperimentalCustomMeshApi
 import androidx.xr.scenecore.ExperimentalSurfaceEntityPixelDimensionsApi
 import androidx.xr.scenecore.KhronosPbrMaterial
 import androidx.xr.scenecore.MeshEntity
+import androidx.xr.scenecore.MeshSubsetTopology
 import androidx.xr.scenecore.SurfaceEntity
+import androidx.xr.scenecore.VertexAttribute
+import androidx.xr.scenecore.VertexAttributeDescriptor
+import androidx.xr.scenecore.VertexAttributeType
+import androidx.xr.scenecore.VertexLayout
 import com.sticktoitive.schoenmon.BuildConfig
 import com.sticktoitive.schoenmon.core.TickProfiler
 import com.sticktoitive.schoenmon.data.PerformanceMonitorRepository
@@ -70,16 +77,13 @@ fun TerrainSurface() {
     val bMat = boundsMaterial ?: return
 
     val initialPose = remember {
-        Pose(
-            Vector3(0.35f, -0.10f, 0.05f),
-            Quaternion.Identity,
-        )
+        Pose(Vector3(0f, 0f, 0f), Quaternion.Identity)
     }
 
     // Root entity: invisible bounds mesh for SceneCoreEntity.
     val rootEntity = remember(bMat) {
         android.util.Log.i("SchoenMon.XR.Terrain", "Creating root MeshEntity...")
-        val boundsMesh = buildBoundsMesh(session)
+        val boundsMesh = buildHolotableBoundsMesh(session)
         MeshEntity.create(session, boundsMesh, listOf(bMat), 0, initialPose)
     }
 
@@ -178,14 +182,12 @@ fun TerrainSurface() {
     SceneCoreEntity(
         factory = { rootEntity },
         modifier = SubspaceModifier
-            // Same placement as the proven RidgelineSurface: beside and below
-            // the dashboard panel (layout overrides the entity's initial pose)
-            .offset(x = 500.dp, y = (-200).dp, z = 100.dp)
-            .width(700.dp)
-            .height(400.dp)
-            .depth(400.dp)
-            .transformingMovable()
-            .resizable(),
+            // Waist height, slightly in front of the dashboard panel.
+            .offset(x = 0.dp, y = (-500).dp, z = 350.dp)
+            .width(1500.dp)
+            .height(580.dp)
+            .depth(800.dp)
+            .transformingMovable(),   // grab-to-reposition ONLY; resizable() removed
     )
 
     DisposableEffect(Unit) {
@@ -197,6 +199,55 @@ fun TerrainSurface() {
             rootEntity.dispose()
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Holotable bounds mesh
+// ---------------------------------------------------------------------------
+
+/**
+ * Invisible bounds mesh: two zero-area triangles at opposite corners of the
+ * holotable volume (hologram + slab). Defines SceneCoreEntity extents without
+ * rendering anything. Pattern documented in AGENTS.md section 5.
+ */
+@OptIn(ExperimentalCustomMeshApi::class)
+private fun buildHolotableBoundsMesh(session: Session): CustomMesh {
+    val hw = 0.75f   // half-width  > EXTENT_X/2 + slab margin
+    val hh = 0.25f   // half-height > AMPLITUDE/2 + slab drop
+    val hd = 0.40f   // half-depth  > EXTENT_Z/2 + slab margin
+
+    val posBuf = ByteBuffer.allocateDirect(6 * 12).order(ByteOrder.nativeOrder())
+    val normBuf = ByteBuffer.allocateDirect(6 * 12).order(ByteOrder.nativeOrder())
+    val colBuf = ByteBuffer.allocateDirect(6 * 4).order(ByteOrder.nativeOrder())
+    val idxBuf = ByteBuffer.allocateDirect(6 * 4).order(ByteOrder.nativeOrder())
+    repeat(3) {
+        posBuf.putFloat(-hw).putFloat(-hh).putFloat(-hd)
+        normBuf.putFloat(0f).putFloat(1f).putFloat(0f)
+        colBuf.put(0).put(0).put(0).put(0)
+    }
+    repeat(3) {
+        posBuf.putFloat(hw).putFloat(hh).putFloat(hd)
+        normBuf.putFloat(0f).putFloat(1f).putFloat(0f)
+        colBuf.put(0).put(0).put(0).put(0)
+    }
+    idxBuf.putInt(0).putInt(1).putInt(2)
+    idxBuf.putInt(3).putInt(4).putInt(5)
+    posBuf.rewind(); normBuf.rewind(); colBuf.rewind(); idxBuf.rewind()
+
+    val layout = VertexLayout(
+        listOf(
+            VertexAttributeDescriptor(VertexAttribute.POSITION, VertexAttributeType.FLOAT3, 0),
+            VertexAttributeDescriptor(VertexAttribute.NORMAL, VertexAttributeType.FLOAT3, 1),
+            VertexAttributeDescriptor(VertexAttribute.COLOR, VertexAttributeType.UBYTE4_NORM, 2),
+        ),
+    )
+    return CustomMesh.FromMeshDataBuilder(session, layout)
+        .addVertexData(ByteBufferRegion(posBuf, 0, posBuf.capacity()))
+        .addVertexData(ByteBufferRegion(normBuf, 0, normBuf.capacity()))
+        .addVertexData(ByteBufferRegion(colBuf, 0, colBuf.capacity()))
+        .setIndexData(ByteBufferRegion(idxBuf, 0, idxBuf.capacity()))
+        .setTopology(MeshSubsetTopology.TRIANGLES)
+        .build()
 }
 
 // ---------------------------------------------------------------------------
@@ -212,9 +263,9 @@ private class TerrainMeshState {
     companion object {
         const val COLS = 60
         const val ROWS = 16
-        const val EXTENT_X = 0.48f   // total width in metres
-        const val EXTENT_Z = 0.24f   // total depth in metres
-        const val AMPLITUDE = 0.15f  // max height
+        const val EXTENT_X = 1.30f   // metres, time axis
+        const val EXTENT_Z = 0.60f   // metres, core lanes
+        const val AMPLITUDE = 0.30f  // metres, load 0..1
     }
 
     val vertexCount = COLS * ROWS
