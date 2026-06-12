@@ -318,6 +318,37 @@ colored surface. User-confirmed on-device. Per-pixel translucency for the holota
 hologram therefore comes straight from the surface texture; the CustomMesh
 per-vertex-alpha fallback path is NOT needed.
 
+### SurfaceEntity GL surface is sampled v-FLIPPED relative to GL conventions (found 2026-06-12)
+
+GL renders bottom-up (NDC y=-1 = row 0 = bottom scanline of the queued buffer); the XR
+compositor's Surface consumer samples top-down (v=0 = top scanline) and applies mesh
+texCoords without the producer's flip transform. Net effect: the GL-rendered color
+texture appears mirrored across the lane (z) axis relative to the TriangleMesh
+geometry. Fix: render the grid top-down in the vertex shader
+(`gl_Position` y = `1.0 - aGridPos.y * 2.0` in `TerrainGLRenderer.VERT_SRC`).
+Status: v-flip fix user-confirmed (colors track geometry). A residual mirror/offset on
+the OTHER axis (time flip or half-lane offset) was still under probe at session end -
+see the holotable plan's resume block before treating orientation as settled.
+
+### Per-tick reflective `setShape` does NOT recreate the surface (verified 2026-06-12)
+
+Decompiled `SurfaceFeatureImpl.setShape` (scenecore-spatial-rendering 1.0.0-alpha15):
+`setShape(CustomMesh)` only calls `ImpressApi.setStereoSurfaceEntityCanvasShapeCustomMesh`
+on the same Impress node - no Surface/BufferQueue teardown. Confirmed live: 428/428
+`eglSwapBuffers` succeeded (EGL_SUCCESS) across a ~4.5-minute capture with `setShape`
+firing every 500ms tick. Deform-in-place via reflection is safe at tick rate.
+
+### Galaxy XR adb-wifi dozes within minutes of doffing (workflow gotcha, 2026-06-12)
+
+When the headset comes off the head it sleeps quickly, the Wireless-debugging socket
+dies, and the mDNS advertisement goes STALE ("connection refused" on the advertised
+port; sometimes no advertisement at all). Waking alone does not re-publish. Revival
+procedure: wake the headset, toggle Wireless debugging off/on in Developer options
+(re-publishes on a NEW port), `adb mdns services` to find it, `adb connect ip:port`.
+A stale duplicate can linger in `adb devices` and break every adb call with "more than
+one device" - `adb disconnect <stale-serial>` clears it. Plan headset-in-the-loop work
+so the user keeps the device worn/awake through deploy-then-look iterations.
+
 ### Data Repository Lifecycle
 - **Scope**: The rolling performance history buffer (capped at 60 entries / 30 seconds at 500ms sampling) lives purely in memory as a Singleton state in `PerformanceMonitorRepository`.
 - **Behavior**: Stopping and starting the service preserves history *as long as the application process stays alive*. Killing the host application process will clear all charts. (In the future, room-based persistence could be introduced to support durable charts).
