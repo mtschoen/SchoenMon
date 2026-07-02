@@ -138,7 +138,12 @@ class PerformanceMonitorService : Service() {
 
                 profiler?.endTick()
 
-                delay(500)
+                // 500ms is needed for smooth XR terrain extrusion (see
+                // AGENTS.md); phones/Folds only redraw a notification icon and
+                // don't need that resolution, so they keep the original 2s
+                // cadence to avoid quadrupling background wakeups for no
+                // visible benefit.
+                delay(if (isXrDevice) 500 else 2000)
             }
         }
     }

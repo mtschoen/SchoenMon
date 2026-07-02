@@ -303,10 +303,23 @@ roughnessFactor=0) washes out vertex colors to near-white. For visible vertex co
 `setEmissiveFactor(0.03, 0.03, 0.03)`. This lets vertex colors show through the PBR
 diffuse without saturating.
 
-**Sampling rate is 500ms for XR.** The service delay was reduced from 2000ms to 500ms
-to support fluid terrain extrusion in the XR visualization. The 60-sample history
-buffer now covers 30 seconds instead of 2 minutes. This also affects the flat phone
-UI — the charts update 4× faster.
+**Sampling rate is 500ms for XR, 2000ms everywhere else.** The service delay was
+reduced from 2000ms to 500ms to support fluid terrain extrusion in the XR
+visualization. On XR the 60-sample history buffer covers 30 seconds instead of 2
+minutes.
+
+> **UPDATE 2026-07-02 - the 500ms cadence originally leaked to phones/Folds.**
+> `PerformanceMonitorService.startSamplingLoop()` called `delay(500)` unconditionally,
+> so non-XR devices also ticked 4x faster than the original 2s design (quadrupling
+> background CPU-sysfs reads, notification IPC, QS-tile IPC, and widget/Live-Update
+> refreshes any time the screen was on, whether or not the dashboard was even open).
+> Found via static analysis while investigating a battery-drain report; on-device
+> `dumpsys batterystats` couldn't confirm/deny because the phone had just died and
+> reset its stats. Fixed by gating the delay on `isXrDevice` - phones are back to
+> 2000ms (60-sample history back to a 2-minute window on phones; still 30s on XR).
+> `BootReceiver` unconditionally starting the service on every boot (no user toggle)
+> is intended behavior, not a bug - the notification is supposed to run in the
+> background continuously; it just needs to be cheap while doing it.
 
 ### SurfaceEntity per-pixel alpha IS honored by the XR compositor (M0 verdict, 2026-06-12)
 
